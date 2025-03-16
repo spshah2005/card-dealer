@@ -36,6 +36,7 @@ int Card_rank_diff(const Card& card1, const Card& card2) {
   return rank1 - rank2;
 } // Card_rank_diff()
 
+// Returns the card's suit for comparison (0x10 clubs, 0x20 diamonds, 0x30 hearts, 0x40 spades)
 inline uint8_t Card_suit(const Card& card) {
   return ((card.value) & 0xF0);
 } // Card_suit()
