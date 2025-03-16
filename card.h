@@ -7,10 +7,16 @@
 typedef struct Card {
   /* Bits 7-6: unused
   *  Bits 5-4: suit (0b00 Clubs, 0b01 Diamonds, 0b10 Hearts, 0b11 Spades)
-  *  Bits 3-0: rank (0b0000 Two, 0b0001 Three, ... 0b1011 King, 0b1100 Ace)
+  *  Bits 3-0: rank (0x0 Two, 0x1 Three, ... 0xB King, 0xC Ace)
+  *  e.g. 0x2C = Ace of Hearts, 0x31 = Two of Spades
   */
   uint8_t value;
 }; // Card{}
+
+Card Card_init(uint8_t value) {
+  Card temp = {value};
+  return temp;
+} // Card_init()
 
 // Returns the rank of the card as an unsigned int 0-12
 inline uint8_t Card_rank(const Card& card) {
