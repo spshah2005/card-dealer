@@ -4,6 +4,35 @@
 
 #include "stdlib.h"
 
+// DEBUG: suit enum
+typedef enum {
+  CLUBS,
+  DIAMONDS,
+  HEARTS,
+  SPADES
+} Suit; // Suit{}
+
+
+// DEBUG: rank enum
+typedef enum {
+  TWO,
+  THREE,
+  FOUR,
+  FIVE,
+  SIX,
+  SEVEN,
+  EIGHT,
+  NINE,
+  TEN,
+  JACK,
+  QUEEN,
+  KING,
+  ACE        // In 3 card poker Ace is high except for making straights, so I think this ordering makes sense
+} Rank; // Rank{}
+
+const uint16_t NUM_SUITS = 4; // I don't think these matter
+const uint16_t NUM_RANKS = 13;
+
 typedef struct Card {
   /* Bits 7-6: unused
   *  Bits 5-4: suit (0b00 Clubs, 0b01 Diamonds, 0b10 Hearts, 0b11 Spades)
@@ -17,6 +46,12 @@ Card Card_init(uint8_t value) {
   Card temp = {value};
   return temp;
 } // Card_init()
+
+Card Card_rank_and_suit(Rank rank, Suit suit) {
+  Card temp;
+  temp.value = (rank) | (suit << 4);
+  return temp;
+} // Card_rank_and_suit()
 
 // Returns the rank of the card as an unsigned int 0-12
 inline uint8_t Card_rank(const Card& card) {
