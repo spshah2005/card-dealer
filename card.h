@@ -12,7 +12,6 @@ typedef enum {
   SPADES
 } Suit; // Suit{}
 
-
 // DEBUG: rank enum
 typedef enum {
   TWO,
