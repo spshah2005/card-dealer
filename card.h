@@ -41,16 +41,16 @@ typedef struct Card {
   uint8_t value;
 }; // Card{}
 
-Card Card_init(uint8_t value) {
-  Card temp = {value};
-  return temp;
-} // Card_init()
-
-Card Card_rank_and_suit(Rank rank, Suit suit) {
+Card Card_init(Rank rank, Suit suit) {
   Card temp;
   temp.value = (rank) | (suit << 4);
   return temp;
 } // Card_rank_and_suit()
+
+Card Card_initFromValue(uint8_t value) {
+  Card temp = {value};
+  return temp;
+} // Card_init()
 
 // Returns the rank of the card as an unsigned int 0-12
 inline uint8_t Card_rank(const Card& card) {
@@ -58,7 +58,7 @@ inline uint8_t Card_rank(const Card& card) {
 } // Card_rank()
 
 // Returns the difference between the rank of card 1 and card 2 (needed because Aces can be low)
-int Card_rank_diff(const Card& card1, const Card& card2) {
+int Card_rankDiff(const Card& card1, const Card& card2) {
   uint8_t rank1 = Card_rank(card1);
   uint8_t rank2 = Card_rank(card2);
   
@@ -76,7 +76,7 @@ inline uint8_t Card_suit(const Card& card) {
 } // Card_suit()
 
 // Returns 1 if cards are of the same suit, 0 otherwise
-int Card_suits_comp(const Card& card1, const Card& card2) {
+int Card_sameSuit(const Card& card1, const Card& card2) {
   return (Card_suit(card1) == Card_suit(card2));
 } // Card_suit_comp()
 
