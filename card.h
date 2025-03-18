@@ -4,6 +4,11 @@
 
 #include "stdlib.h"
 
+#include "rfid.h"
+
+// TODO: LUT of UID values to card values
+uint8_t UID_to_value[52];
+
 // DEBUG: suit enum
 typedef enum {
   CLUBS,
