@@ -20,18 +20,18 @@ typedef enum MFRC522_Register {
   FIFOLevelReg  = 0x0A << 1,
   ControlReg    = 0x0C << 1,
   BitFramingReg = 0x0D << 1,
-  CollReg		= 0x0E << 1,
+  CollReg			  = 0x0E << 1,
   // Page 1:
-  ModeReg		= 0x11 << 1,
+  ModeReg				= 0x11 << 1,
   TxModeReg     = 0x12 << 1,
   RxModeReg     = 0x13 << 1,
   TxControlReg  = 0x14 << 1,
-  TxASKReg		= 0x15 << 1,
+  TxASKReg			= 0x15 << 1,
   // Page 2:
   ModWidthReg   = 0x24 << 1,
-  TModeReg		= 0x2A << 1,
+  TModeReg			= 0x2A << 1,
   TPrescalerReg = 0x2B << 1,
-  TReloadRegH	= 0x2C << 1,
+  TReloadRegH		= 0x2C << 1,
   TReloadRegL 	= 0x2D << 1,
   // Page 3:
   AutoTestReg   = 0x36 << 1,
@@ -53,10 +53,15 @@ typedef enum MFRC522_Command  {
   SoftReset        = 0x0F  // Resets the peripheral
 } MFRC522_Command; // MFRC522_Command{}
 
-// Commands sent to the PICC
+// Commands sent to the PICC (card)
 typedef enum PICC_Command {
-	PICC_CMD_REQA = 0x26, // Request (Type A card)
-	PICC_CMD_WUPA = 0x52  // WakeUp  (Type A card)
+	PICC_CMD_REQA    = 0x26, // REQuest (Type A card)
+  PICC_CMD_WUPA    = 0x52, // WakeUP  (Type A card)
+ 	PICC_CMD_CT      = 0x88, // Cascade Tag
+	PICC_CMD_SEL_CL1 = 0x93, // Used in anti-collision
+	PICC_CMD_SEL_CL2 = 0x95, // "
+	PICC_CMD_SEL_CL3 = 0x97, // "
+	PICC_CMD_HALTA   = 0x50  // Puts PICC in HALT mode
 } PICC_Command;
 
 // Return codes
