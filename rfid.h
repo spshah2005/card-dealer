@@ -3,8 +3,6 @@
 
 #include "stdlib.h"
 
-uint8_t txData[25];
-
 // Registers on the MFRC522 peripheral
 typedef enum MFRC522_Register {
   // Page 0:
@@ -232,7 +230,7 @@ Status MFRC522_PICC_REQA_OR_WUPA(PICC_Command command, uint8_t* bufferATQA, uint
 		return STATUS_ERROR;
 	}
 	return STATUS_OK;
-} // MFRC522_PICC_REQA_OR_WUPA
+} // MFRC522_PICC_REQA_OR_WUPA()
 
 int MFRC522_IsNewCardPresent() {
 	uint8_t bufferATQA[2];
