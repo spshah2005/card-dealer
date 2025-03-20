@@ -20,18 +20,18 @@ typedef enum MFRC522_Register {
   FIFOLevelReg  = 0x0A << 1,
   ControlReg    = 0x0C << 1,
   BitFramingReg = 0x0D << 1,
-  CollReg			  = 0x0E << 1,
+  CollReg	= 0x0E << 1,
   // Page 1:
-  ModeReg				= 0x11 << 1,
+  ModeReg	= 0x11 << 1,
   TxModeReg     = 0x12 << 1,
   RxModeReg     = 0x13 << 1,
   TxControlReg  = 0x14 << 1,
-  TxASKReg			= 0x15 << 1,
+  TxASKReg	= 0x15 << 1,
   // Page 2:
   ModWidthReg   = 0x24 << 1,
-  TModeReg			= 0x2A << 1,
+  TModeReg	= 0x2A << 1,
   TPrescalerReg = 0x2B << 1,
-  TReloadRegH		= 0x2C << 1,
+  TReloadRegH	= 0x2C << 1,
   TReloadRegL 	= 0x2D << 1,
   // Page 3:
   AutoTestReg   = 0x36 << 1,
