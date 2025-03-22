@@ -1,42 +1,224 @@
 #include <stdio.h>
+#include <stdlib.h>
+typedef struct{
+  int card1, card2, card3;
+  int winning_num; // 0 high card, 1 pair, 2 straight, 3 thre of a kind, 4 flush, 5 straight flush
+} CardSet;
 
-int main() {
-    int x;
-    char *suit;
+int get_card_rank(int card){
+    return card % 13;
+}
 
-    printf("Enter a card number (0-51): ");
-    scanf("%d", &x);
-
-    if (x < 0 || x > 51) {  // Ensure valid input
-        printf("Invalid card number.\n");
-        return -1;
+char* get_card_suit(int x){
+    if(x < 13){
+        return "Spades";
+    }else if(x < 26){
+        return "Clubs";
+    }else if(x < 39){
+        return "Diamonds";
     }
+    return "Hearts";
+}
 
-    int card_rank = x % 13;  // Rank of the card
+const char* print_card(int card){
+char* card_str = malloc(20);  // Allocate memory for the string
+    if (!card_str) return NULL;   // Check for allocation failure
+
+    int card_rank = card % 13;    // Rank of the card
+    const char* suit;             // Suit of the card
 
     // Assign suit based on range
-    if (x < 13) {
+    if (card < 13) {
         suit = "Spades";
-    } else if (x < 26) {
+    } else if (card < 26) {
         suit = "Clubs";
-    } else if (x < 39) {
+    } else if (card < 39) {
         suit = "Diamonds";
     } else {
         suit = "Hearts";
     }
 
-    // Print the card rank with the correct name
+    // Assign card rank name
     if (card_rank == 0) {
-        printf("The card is: Ace of %s\n", suit);
+        sprintf(card_str, "Ace of %s", suit);
     } else if (card_rank == 10) {
-        printf("The card is: Jack of %s\n", suit);
+        sprintf(card_str, "Jack of %s", suit);
     } else if (card_rank == 11) {
-        printf("The card is: Queen of %s\n", suit);
+        sprintf(card_str, "Queen of %s", suit);
     } else if (card_rank == 12) {
-        printf("The card is: King of %s\n", suit);
+        sprintf(card_str, "King of %s", suit);
     } else {
-        printf("The card is: %d of %s\n", card_rank + 1, suit);
+        sprintf(card_str, "%d of %s", card_rank + 1, suit);
+    }
+
+    return card_str; // Return dynamically allocated string
+}
+
+int straight_flush_check(int card1, int card2, int card3){
+    int flush = 0;
+    int straight = 0;
+    if(get_card_suit(card1) == get_card_suit(card2) && get_card_suit(card1) == get_card_suit(card3)){
+        // if here its a flush
+        flush = 1;
+    }
+    //checking for straight
+    if(card1 + 1 == card2 && card2 + 1 == card3){
+        straight = 1;
+    }
+    if(flush == 1 && straight == 1){
+        return 5;
+    } else if(flush == 1){
+        return 4;
+    } else if(straight == 1){
+        return 2;
+    }
+    return 0;
+}
+
+int three_of_a_kind_check(int card1, int card2, int card3){
+    int three_of_a_kind = 0;
+    if(card1 % 13 == card2 % 13 && card1 % 13 == card3 % 13){
+        three_of_a_kind = 1;
+    }
+    if(three_of_a_kind == 1){
+        return 3;
+    }
+    return 0;
+}
+
+int pair_check(int card1, int card2, int card3){
+    int pair = 0;
+    if(card1 % 13 == card2 % 13 || card1 % 13 == card3 % 13 || card3 % 13 == card2 % 13){
+        pair = 1;
+    }
+    if(pair == 1){
+        return 1;
+    }
+    return 0;
+}
+
+int main() {
+    // 3-card poker
+    int x;
+    int num_player;
+    char *suit;
+    printf("How many players? ");
+    scanf("%d", &num_player);
+    CardSet cards[num_player + 1];
+    for (int round = 0; round < 3; ++round) {  // First deal card1, then card2, then card3
+        printf("Card number %d for everyone\n", round + 1);
+        for (int player = 0; player < num_player + 1; ++player){
+            printf("what card dose player %d get: ", player + 1);
+            scanf("%d", &x);
+            //printf("\n");
+            if (round == 0) {
+                cards[player].card1 = x;
+            } else if (round == 1) {
+                cards[player].card2 = x;
+            } else {
+                cards[player].card3 = x;
+            }
+        }
+    }
+    //sorting each players hand
+    for(int i = 0; i < num_player + 1; ++i){
+        int temp;
+        if (cards[i].card1 > cards[i].card2) {  // Swap if needed
+            temp = cards[i].card1;
+            cards[i].card1 = cards[i].card2;
+            cards[i].card2 = temp;
+        }
+        if (cards[i].card2 > cards[i].card3) {  // Swap if needed
+            temp = cards[i].card2;
+            cards[i].card2 = cards[i].card3;
+            cards[i].card3 = temp;
+        }
+        if (cards[i].card1 > cards[i].card2) {  // Final check
+            temp = cards[i].card1;
+            cards[i].card1 = cards[i].card2;
+            cards[i].card2 = temp;
+        }
+    }
+    // figuering out what each player has
+    for(int players = 0; players < num_player + 1; ++players){
+        //checking for straight flush
+        cards[players].winning_num = straight_flush_check(cards[players].card1,
+                                     cards[players].card2, cards[players].card3);
+        if(cards[players].winning_num == 5 || cards[players].winning_num == 4){
+            continue; // nothing will be better then this
+        }
+        
+        cards[players].winning_num == three_of_a_kind_check(cards[players].card1,
+                                     cards[players].card2, cards[players].card3);
+        if(cards[players].winning_num == 3 || cards[players].winning_num == 2){
+            continue; // nothing will be better then this
+        }       
+        //checking for pair
+        cards[players].winning_num == pair_check(cards[players].card1,
+                                     cards[players].card2, cards[players].card3);
+        // at this point its eight pair or high card for winning hand
+    } // end of for loop for checking winning
+    
+    // Find the player with the highest winning hand
+    int winning_hand = cards[0].winning_num;
+    int player_num = 0;
+
+    for (int i = 0; i < num_player + 1; ++i) {  // Start from 1 since we initialized with index 0
+        if (cards[i].winning_num > winning_hand) {
+            winning_hand = cards[i].winning_num;
+            player_num = i;
+        }
+    }
+    char* hand_name;
+    if(winning_hand == 5){
+        hand_name = "Straight Flush";
+        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
+        player_num + 1,  // Convert index to 1-based player number
+        hand_name,
+        print_card(cards[player_num].card1), 
+        print_card(cards[player_num].card2), 
+        print_card(cards[player_num].card3));
+    }else if(winning_hand == 4){
+        hand_name = "Flush";
+        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
+        player_num + 1,  // Convert index to 1-based player number
+        hand_name,
+        print_card(cards[player_num].card1), 
+        print_card(cards[player_num].card2), 
+        print_card(cards[player_num].card3));
+    }else if(winning_hand == 3){
+        hand_name = "Three of A Kind";
+        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
+        player_num + 1,  // Convert index to 1-based player number
+        hand_name,
+        print_card(cards[player_num].card1), 
+        print_card(cards[player_num].card2), 
+        print_card(cards[player_num].card3));
+    }else if(winning_hand == 2){
+        hand_name = "Straight";
+        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
+        player_num + 1,  // Convert index to 1-based player number
+        hand_name,
+        print_card(cards[player_num].card1), 
+        print_card(cards[player_num].card2), 
+        print_card(cards[player_num].card3));
+    }else if(winning_hand == 1){
+        hand_name = "One Pair";
+        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
+        player_num + 1,  // Convert index to 1-based player number
+        hand_name,
+        print_card(cards[player_num].card1), 
+        print_card(cards[player_num].card2), 
+        print_card(cards[player_num].card3));
+    }else{
+        hand_name = "High Card";
+        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
+        player_num + 1,  // Convert index to 1-based player number
+        hand_name,
+        print_card(cards[player_num].card1), 
+        print_card(cards[player_num].card2), 
+        print_card(cards[player_num].card3));
     }
 
     return 0;
-}
+} // end of main
