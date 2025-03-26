@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdlib.h>
 typedef struct{
   int card1, card2, card3;
   int winning_num; // 0-12 high card, 13-25 pair, 26-38 straight, 39-51 three of a kind, 52-64 flush, 64-76 straight flush
@@ -20,10 +19,7 @@ char* get_card_suit(int x){
     return "Hearts";
 }
 
-const char* print_card(int card){
-    char* card_str = malloc(20);  // Allocate memory for the string
-    if (!card_str) return NULL;   // Check for allocation failure
-
+void print_card(int card){
     int card_rank = card % 13;    // Rank of the card
     const char* suit;             // Suit of the card
 
@@ -38,20 +34,19 @@ const char* print_card(int card){
         suit = "Hearts";
     }
 
-    // Assign card rank name
+    // Print the card rank with the correct name
     if (card_rank == 0) {
-        sprintf(card_str, "Ace of %s", suit);
+        printf("Ace of %s", suit);
     } else if (card_rank == 10) {
-        sprintf(card_str, "Jack of %s", suit);
+        printf("Jack of %s", suit);
     } else if (card_rank == 11) {
-        sprintf(card_str, "Queen of %s", suit);
+        printf("Queen of %s", suit);
     } else if (card_rank == 12) {
-        sprintf(card_str, "King of %s", suit);
+        printf("King of %s", suit);
     } else {
-        sprintf(card_str, "%d of %s", card_rank + 1, suit);
+        printf("%d of %s", card_rank + 1, suit);
     }
-
-    return card_str; // Return dynamically allocated string
+    printf(", ");
 }
 
 int straight_flush_check(int card1, int card2, int card3){
@@ -92,6 +87,19 @@ int pair_check(int card1, int card2, int card3){
         return 13 + (card2 % 13);
     }
     return card1 % 13; // this is the highest rank card
+}
+
+void final_print(int player_num, int num_player, char* hand_name, CardSet *cards){
+    if (player_num + 1 == num_player + 1) {
+            printf("\nDealer won with a %s: ", hand_name);
+        } else {
+            printf("\nPlayer %d won with a %s: ", player_num + 1, hand_name);
+        }
+    
+        // Print the three cards separately since print_card() does not return a value
+        print_card(cards[player_num].card1);
+        print_card(cards[player_num].card2);
+        print_card(cards[player_num].card3);
 }
 
 int main() {
@@ -160,6 +168,8 @@ int main() {
     // Find the player with the highest winning hand
     int winning_hand = cards[0].winning_num;
     int player_num = 0;
+    int tie = 0;
+    int tie_player1, tie_player2;
 
     for(int i = 0; i < num_player + 1; ++i){  // seeing who won
         if(cards[i].winning_num > winning_hand){
@@ -167,57 +177,78 @@ int main() {
             player_num = i;
         }
     }
+    
+    // looking for tie breakers
+    for(int i = 0; i < num_player + 1; ++i){
+        if(cards[player_num].winning_num == cards[i].winning_num && player_num != i){ // tie case
+            if(get_card_rank(cards[player_num].card2) < get_card_rank(cards[i].card2)){ // checking card2 to see what rank is higher
+                // if here i has a higher rank card2
+                winning_hand = cards[i].winning_num;
+                player_num = i;
+                tie = 0;
+                continue;
+            }
+            if(get_card_rank(cards[player_num].card2) == get_card_rank(cards[i].card2)){
+                // check for the third card
+                if(get_card_rank(cards[player_num].card3) < get_card_rank(cards[i].card3)){
+                    winning_hand = cards[i].winning_num;
+                    player_num = i;
+                    tie = 0;
+                    continue;
+                }
+            }
+            if(get_card_rank(cards[player_num].card3) == get_card_rank(cards[i].card3)){
+                // its a complete tie
+                tie = 1;
+                tie_player1 = player_num;
+                tie_player2 = i;
+            }
+        }
+    } // end of tie checking
+
+    if(tie == 1){
+        printf("\nThere is a tie between ");
+        
+        // Print first player (or Dealer)
+        if (tie_player1 + 1 == num_player + 1) {
+            printf("the Dealer");
+        } else {
+            printf("Player %d", tie_player1 + 1);
+        }
+    
+        printf(" and ");
+    
+        // Print second player (or Dealer)
+        if (tie_player2 + 1 == num_player + 1) {
+            printf("the Dealer");
+        } else {
+            printf("Player %d", tie_player2 + 1);
+        }
+    
+        printf("\n");
+        return 0;
+    }
 
     // start of printing winner
     char* hand_name;
     if(winning_hand >= 64){
         hand_name = "Straight Flush";
-        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
-        player_num + 1,  // Convert index to 1-based player number
-        hand_name,
-        print_card(cards[player_num].card1), 
-        print_card(cards[player_num].card2), 
-        print_card(cards[player_num].card3));
+        final_print(player_num, num_player, hand_name, cards);
     }else if(winning_hand >= 52){
         hand_name = "Flush";
-        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
-        player_num + 1,  // Convert index to 1-based player number
-        hand_name,
-        print_card(cards[player_num].card1), 
-        print_card(cards[player_num].card2), 
-        print_card(cards[player_num].card3));
+        final_print(player_num, num_player, hand_name, cards);
     }else if(winning_hand >= 39){
         hand_name = "Three of A Kind";
-        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
-        player_num + 1,  // Convert index to 1-based player number
-        hand_name,
-        print_card(cards[player_num].card1), 
-        print_card(cards[player_num].card2), 
-        print_card(cards[player_num].card3));
+        final_print(player_num, num_player, hand_name, cards);
     }else if(winning_hand >= 26){
         hand_name = "Straight";
-        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
-        player_num + 1,  // Convert index to 1-based player number
-        hand_name,
-        print_card(cards[player_num].card1), 
-        print_card(cards[player_num].card2), 
-        print_card(cards[player_num].card3));
+        final_print(player_num, num_player, hand_name, cards);
     }else if(winning_hand >= 13){
         hand_name = "One Pair";
-        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
-        player_num + 1,  // Convert index to 1-based player number
-        hand_name,
-        print_card(cards[player_num].card1), 
-        print_card(cards[player_num].card2), 
-        print_card(cards[player_num].card3));
+        final_print(player_num, num_player, hand_name, cards);
     }else{
         hand_name = "High Card";
-        printf("\nPlayer %d won with a %s, %s, %s, %s\n",
-        player_num + 1,  // Convert index to 1-based player number
-        hand_name,
-        print_card(cards[player_num].card1), 
-        print_card(cards[player_num].card2), 
-        print_card(cards[player_num].card3));
+        final_print(player_num, num_player, hand_name, cards);
     }
 
     return 0;
