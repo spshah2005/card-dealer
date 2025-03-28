@@ -74,51 +74,66 @@ typedef enum Status {
 	STATUS_CRC_WRONG
 } Status;
 
-// This is where I've gotten to as of now, there's some bug in the process of identifying a new card that I cannot find. It's 4:16 AM right now.
-
 void MFRC522_WriteRegister(MFRC522_Register reg, uint8_t value) {
 	uint8_t txBuffer[2];
 	txBuffer[0] = reg;
 	txBuffer[1] = value;
+	// Select peripheral
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	// Perform interaction
 	HAL_SPI_Transmit(&hspi1, txBuffer, 2, HAL_MAX_DELAY);
+	// Free peripheral
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 } // MFRC522_WriteRegister()
 
-// Write n bytes of data, stored in byte array value, to register reg
-void MFRC522_WriteNtoRegister(MFRC522_Register reg, int n, uint8_t* value) {
-	uint8_t txBuffer[n+1];
-	txBuffer[0] = reg;
-	// Fill the buffer with values (crazy slow, but it won't let me do anything else! yay!)
-	for (int i = 1; i < n+1; i++) {
-		txBuffer[i] = value[i-1];
-	}
-	HAL_SPI_Transmit(&hspi1, txBuffer, n+1, HAL_MAX_DELAY);
-} // MFRC522_WriteNtoRegister()
+void MFRC522_WriteRegisterMulti(MFRC522_Register reg, int count, uint8_t* values) {
+	// uint8_t txBuffer[2] = {reg, 0x00};
+	// Select peripheral
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	HAL_SPI_Transmit(&hspi1, ((uint8_t*)&reg), 1, HAL_MAX_DELAY);
+	HAL_SPI_Transmit(&hspi1, values, count, HAL_MAX_DELAY);
+	// Free peripheral
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+}
 
 uint8_t MFRC522_ReadRegister(MFRC522_Register reg) {
 	uint8_t txBuffer[2];
-	txBuffer[0] = (reg | 0x80);
+	txBuffer[0] = (reg|0x80);
 	txBuffer[1] = 0x00;
 	uint8_t rxBuffer[2];
+	// Select peripheral
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	// Perform read
 	HAL_SPI_TransmitReceive(&hspi1, txBuffer, rxBuffer, 2, HAL_MAX_DELAY);
+	// Free peripheral
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+	// Return value read from register
 	return rxBuffer[1];
 } // MFRC522_ReadRegister()
 
-void MFRC522_ReadNfromRegister(MFRC522_Register reg, int n, uint8_t* rxBuffer) {
-	uint8_t txBuffer[n+1];
-	for (int i = 0; i < n; i++) {
-		txBuffer[i] = (reg | 0x80);
+void MFRC522_ReadRegisterMulti(MFRC522_Register reg, int count, uint8_t* values) {
+	uint8_t read_addr = reg | 0x80;
+	// Select peripheral
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	HAL_SPI_Transmit(&hspi1, ((uint8_t*)&read_addr), 1, HAL_MAX_DELAY);
+	// Loop requesting
+	for (int i = 0; i < count; i++) {
+		HAL_SPI_TransmitReceive(&hspi1, ((uint8_t*)&read_addr), &values[i], 1, HAL_MAX_DELAY);
 	}
-	HAL_SPI_TransmitReceive(&hspi1, txBuffer, rxBuffer, n+1, HAL_MAX_DELAY);
-} // MFRC522_ReadNfromRegister()
+	// Get final read
+	HAL_SPI_TransmitReceive(&hspi1, 0x00, &values[count], 1, HAL_MAX_DELAY);
+	// Free peripheral
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+}
 
-// Performs a soft reset
 void MFRC522_Reset() {
 	// Write the reset command to CommandReg
 	MFRC522_WriteRegister(CommandReg, SoftReset);
-	// TODO: if using soft power-down mode, have to delay here
 } // MFRC522_Reset()
 
 void MFRC522_Init() {
+	// Perform a garbage write first (if this works, it doesn't matter)
+	MFRC522_WriteRegister(CommandReg, Idle);
 	// Perform a soft reset
 	MFRC522_Reset();
 
@@ -148,89 +163,133 @@ void MFRC522_printVersion() {
 	printf("version: %X\n\r", version);
 } // MFRC522_printVersion()
 
-Status MFRC522_CommunicateWithPICC(MFRC522_Command command, uint8_t waitIrq, uint8_t* sendData, uint8_t sendLen, uint8_t* backData, uint8_t *backLen, uint8_t* validBits) {
-	uint8_t bitFraming = 0x3;
+void MFRC522_performSelfTest() {
 
+	// 1. Soft Reset
+	MFRC522_Reset();
+
+	// 2. Clear internal buffer by writing 25 bytes of 0x00
+	MFRC522_WriteRegister(FIFOLevelReg, 0x80); // flush FIFO buffer
+	uint8_t zeroes[25] = {0x00};
+	MFRC522_WriteRegisterMulti(FIFODataReg, 25, zeroes);
+	MFRC522_WriteRegister(CommandReg, Mem); // transfer to internal buffer
+
+	// 3. Enable self-test
+	MFRC522_WriteRegister(AutoTestReg, 0x09);
+
+	// 4. Write 0x00 to the FIFO buffer
+	MFRC522_WriteRegister(FIFODataReg, 0x00);
+
+	// 5. Start self-test by issuing the CalcCRC command
+	MFRC522_WriteRegister(CommandReg, CalcCRC);
+
+	// 6. Wait for self-test to complete
+	HAL_Delay(500);
+
+	// 7. Read out resulting 64 bytes from the FIFO buffer
+	uint8_t result[64];
+	MFRC522_ReadRegisterMulti(FIFODataReg, 64, result);
+
+	// Reset AutoTestReg
+	MFRC522_WriteRegister(AutoTestReg, 0x00);
+	// Re-init:
+	MFRC522_Init();
+
+} // MFRC522_performSelfTest()
+
+Status MFRC522_CommunicateWithPICC(MFRC522_Command command, uint8_t waitIRq, uint8_t* sendData, uint8_t sendLen, uint8_t* backData, uint8_t* backLen, uint8_t* validBits) {
+	uint8_t bitFraming = *validBits;
 	MFRC522_WriteRegister(CommandReg, Idle);
 	MFRC522_WriteRegister(ComIrqReg, 0x7F);
 	MFRC522_WriteRegister(FIFOLevelReg, 0x80);
-	MFRC522_WriteNtoRegister(FIFODataReg, sendLen, sendData);
+	MFRC522_WriteRegisterMulti(FIFODataReg, sendLen, sendData);
 	MFRC522_WriteRegister(BitFramingReg, bitFraming);
 	MFRC522_WriteRegister(CommandReg, command);
 	if (command == Transceive) {
-		uint8_t value = MFRC522_ReadRegister(BitFramingReg);
-		value |= 0x80;
-		// TODO: optimize by just doing one write here
+		uint8_t value = 0x80 | MFRC522_ReadRegister(BitFramingReg);
 		MFRC522_WriteRegister(BitFramingReg, value);
-	} // if
+	}
 
-	// Wait 36 milliseconds maximum (really?)
-	// TODO: do this better
-	HAL_Delay(36);
+	// 36ms, worst-case scenario
+	uint32_t start = 0;
+	uint32_t deadline = 36;
+	int completed = 0;
+	while(!completed && start < deadline) {
+		uint8_t n = MFRC522_ReadRegister(ComIrqReg);
+		if (n & waitIRq) {
+			completed = 1;
+			break;
+		}
+		/* if (n & 0x01) {
+			return STATUS_TIMEOUT;
+		}*/
+		HAL_Delay(1);
+		start++;
+	} // while
 
-	// If nothing was detected, call a timeout
-	if (!(MFRC522_ReadRegister(ComIrqReg) & waitIrq)) {
+	if (!completed) {
 		return STATUS_TIMEOUT;
 	}
 
-	// If there was any error except collisions
 	uint8_t errorRegValue = MFRC522_ReadRegister(ErrorReg);
 	if (errorRegValue & 0x13) {
 		return STATUS_ERROR;
 	}
 
 	uint8_t _validBits = 0;
-
-	// If caller requested data back, provide it
-	if (backData && backLen) {
-		uint8_t level = MFRC522_ReadRegister(FIFOLevelReg);
-		if (level > *backLen) {
+	if (backData != NULL && backLen != NULL) {
+		uint8_t n = MFRC522_ReadRegister(FIFOLevelReg);
+		if (n > *backLen) {
 			return STATUS_NO_ROOM;
 		}
-		*backLen = level;
-		// Get received data from FIFO
-		MFRC522_ReadNfromRegister(FIFODataReg, level, backData);
+		*backLen = n;
+		MFRC522_ReadRegisterMulti(FIFODataReg, n, backData);
 		_validBits = MFRC522_ReadRegister(ControlReg) & 0x07;
-		if (validBits) {
+		if (validBits != NULL) {
 			*validBits = _validBits;
 		}
-	} // if
+	}
 
+	// Tell about collisions
 	if (errorRegValue & 0x08) {
 		return STATUS_COLLISION;
 	}
 
-	// (we're not doing crc validation)
-
 	return STATUS_OK;
+
 } // MFRC522_CommunicateWithPICC()
 
 Status MFRC522_TransceiveData(uint8_t* sendData, uint8_t sendLen, uint8_t* backData, uint8_t* backLen, uint8_t* validBits) {
 	uint8_t waitIrq = 0x30;
-	return MFRC522_CommunicateWithPICC(Transceive, waitIrq, sendData, sendLen, backData, &backLen, validBits);
-} // MFRC522_Transceive()
+	return MFRC522_CommunicateWithPICC(Transceive, waitIrq, sendData, sendLen, backData, backLen, validBits);
+}
 
-Status MFRC522_PICC_REQA_OR_WUPA(PICC_Command command, uint8_t* bufferATQA, uint8_t* bufferSize) {
-	// Check that buffer is good
-	if (bufferATQA == 0 || *bufferSize < 2) {
+Status MFRC522_REQA_or_WUPA(PICC_Command command, uint8_t* bufferATQA, uint8_t* bufferSize) {
+	uint8_t validBits;
+	Status status;
+
+	if (bufferATQA == NULL || *bufferSize < 2) {
 		return STATUS_NO_ROOM;
 	}
-	// Clear MSB of CollReg
+	// Clear CollReg MSB
 	uint8_t value = MFRC522_ReadRegister(CollReg);
 	value &= ~(0x80);
 	MFRC522_WriteRegister(CollReg, value);
-	//
-	uint8_t validBits = 7;
 
-	Status status = MFRC522_TransceiveData(&command, 1, bufferATQA, &bufferSize, (uint8_t*)(&validBits));
+	validBits = 7;
+	status = MFRC522_TransceiveData(&command, 1, bufferATQA, bufferSize, &validBits);
 	if (status != STATUS_OK) {
 		return status;
 	}
-	if (*bufferSize != 2 || validBits != 0) { // ATQA must be 16 bits
+	if (*bufferSize != 2 || validBits != 0) {
 		return STATUS_ERROR;
 	}
 	return STATUS_OK;
-} // MFRC522_PICC_REQA_OR_WUPA()
+}
+
+Status MFRC522_RequestA(uint8_t* bufferATQA, uint8_t *bufferSize) {
+	return MFRC522_REQA_or_WUPA(PICC_CMD_REQA, bufferATQA, bufferSize);
+}
 
 int MFRC522_IsNewCardPresent() {
 	uint8_t bufferATQA[2];
@@ -242,11 +301,9 @@ int MFRC522_IsNewCardPresent() {
 	// Reset ModWidthReg
 	MFRC522_WriteRegister(ModWidthReg, 0x26);
 
-	Status result = MFRC522_PICC_REQA_OR_WUPA(PICC_CMD_REQA, bufferATQA, &bufferSize);
-	for (int i = 0; i < bufferSize; i++) {
-		printf("[%d]: bufferATQA[i]\r\n", bufferATQA[i]);
-	}
+	Status result = MFRC522_RequestA(bufferATQA, &bufferSize);
+	printf("Status: %d\r\n",  (uint8_t)result);
 	return (result == STATUS_OK || result == STATUS_COLLISION);
-} // MFRD522_IsNewCardPresent()
+}
 
 #endif
