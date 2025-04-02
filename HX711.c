@@ -18,8 +18,8 @@
 #define HX711_CLK_GPIO    GPIOA
 #define HX711_CLK_PIN     GPIO_PIN_0   // HX711 SCK → PA2
 
-static int32_t OFFSET = 0;  // Calibration Offset
-static float SCALE_FACTOR = 1;  // Calibration Scale Factor
+static int32_t OFFSET = 26700;  // Calibration Offset
+static float SCALE_FACTOR = -500;  // Calibration Scale Factor
 TIM_HandleTypeDef *HX711_Timer;
 
 void delay_us(uint16_t us) { //0.01 of a microsecond
@@ -90,11 +90,11 @@ int32_t HX711_Read(void) {
 //    SCALE_FACTOR = scale;
 //}
 
-float HX711_GetWeight(void) {
+int HX711_GetWeight(void) {
     int32_t raw_data = HX711_Read();
     if (raw_data == -1) return -1;  // Error case
-
-    return (raw_data - OFFSET) / SCALE_FACTOR;
+//    printf("rawww: %ld\r\n", raw_data);
+    return (raw_data + OFFSET) / SCALE_FACTOR;
 }
 
 

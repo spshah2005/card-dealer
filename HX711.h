@@ -17,7 +17,7 @@ int32_t HX711_Read(void);
 //void HX711_PowerDown(void);
 //void HX711_WakeUp(void);
 //void HX711_SetCalibration(int32_t offset, float scale);
-float HX711_GetWeight(void);
+int HX711_GetWeight(void);
 void delay_us(uint16_t us);
 
 #endif  // HX711_H
