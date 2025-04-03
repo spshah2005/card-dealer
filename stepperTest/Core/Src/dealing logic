@@ -1,0 +1,17 @@
+#include <stdio.h>
+#include <main.c>
+
+// number of playerers intput here
+int num_players;
+scanf("%d", &num_players);
+scanf("%d", &cardsDealt);
+int rpm = 500;
+float play_angle = 360 / num_players + 1;
+for (int i = 0; i < cardsDealt; ++j) {
+	for(int j = 0; j < num_players; ++i){
+		offsetAngle(play_angle, 1, rpm);
+	}
+	// Dealer
+	offsetAngle(play_angle*num_players, 0, rpm);
+	
+}
