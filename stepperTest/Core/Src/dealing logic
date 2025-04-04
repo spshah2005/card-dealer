@@ -1,17 +1,46 @@
 #include <stdio.h>
 #include <main.c>
 
-// number of playerers intput here
-int num_players;
-scanf("%d", &num_players);
-scanf("%d", &cardsDealt);
-int rpm = 500;
-float play_angle = 360 / num_players + 1;
-for (int i = 0; i < cardsDealt; ++j) {
-	for(int j = 0; j < num_players; ++i){
-		offsetAngle(play_angle, 1, rpm);
+void Card_Dealer2(){ // this call deals the cards
+	HAL_Delay(250); // wait for turn to be complete
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1249); // turn the sevro on to have card read from RFID
+	HAL_Delay(50); // wait for card to move
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1499); // turns off the servo
+	// having the RFID read the card here
+	// scanf("%d", &card_num);
+	// might have to add a check to make sure it was read
+	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 1); // turn on the dc motor to deal a card
+	HAL_Delay(250);
+	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 0); // turn off the dc motor bc card has been delt
+}
+
+//Quinn's functions
+void Card_Dealer1(int player, int num_player, int rpm){ // this call finds the right person to get the card to
+	static int current_player = 0;
+	int diff = player - current_player;
+	if(diff > 0){
+		offsetAngle((360 / num_player) * diff, 1, rpm);
+		Card_Dealer2();
 	}
-	// Dealer
-	offsetAngle(play_angle*num_players, 0, rpm);
-	
+	else if(diff < 0){
+		offsetAngle((-360 / num_player) * diff, 0, rpm);
+		Card_Dealer2();
+	}
+	else{
+		Card_Dealer2(); // if its pointed at the right person already
+	}
+	current_player = player;
+}
+
+// the whole thing should be a function call
+void Three_Card_Poker(int num_player){ // kinda the main
+	int rpm = 500;
+	float play_angle = 360 / num_player + 1;
+	for(int i = 0; i < cardsDealt; ++j){
+		for(int j = 0; j < num_player; ++i){
+			Card_Dealer1(j, num_playes, rpm);
+		} // end of loop j
+		// deal to the Dealer bc we cant go in a circle forever
+		Card_Dealer1(0, num_player, rpm);
+	} // end of loop i
 }
