@@ -1,17 +1,25 @@
 #include <stdio.h>
 #include <main.c>
+#include <logic.c>
 
-void Card_Dealer2(){ // this call deals the cards
+void Card_Dealer2(int num_player){ // this call deals the cards
+	static int Cards[num_player * 3];
+	static int num_of_cards = 0;
 	HAL_Delay(250); // wait for turn to be complete
 	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1249); // turn the sevro on to have card read from RFID
 	HAL_Delay(50); // wait for card to move
 	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1499); // turns off the servo
 	// having the RFID read the card here
-	// scanf("%d", &card_num);
+	// scanf("%d", &Cards[num_of_cards]);
 	// might have to add a check to make sure it was read
+	++num_of_cards;
 	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 1); // turn on the dc motor to deal a card
 	HAL_Delay(250);
 	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 0); // turn off the dc motor bc card has been delt
+	if(num_of_cards == (num_player * 3)){
+		// call game logic
+		logic(num_player, Cards);
+	}
 }
 
 //Quinn's functions
@@ -20,24 +28,22 @@ void Card_Dealer1(int player, int num_player, int rpm){ // this call finds the r
 	int diff = player - current_player;
 	if(diff > 0){
 		offsetAngle((360 / num_player) * diff, 1, rpm);
-		Card_Dealer2();
+		Card_Dealer2(num_player);
 	}
 	else if(diff < 0){
 		offsetAngle((-360 / num_player) * diff, 0, rpm);
-		Card_Dealer2();
+		Card_Dealer2(num_player);
 	}
 	else{
-		Card_Dealer2(); // if its pointed at the right person already
+		Card_Dealer2(num_player); // if its pointed at the right person already
 	}
 	current_player = player;
 }
 
-// the whole thing should be a function call
 void Three_Card_Poker(int num_player){ // kinda the main
 	int rpm = 500;
-	float play_angle = 360 / num_player + 1;
-	for(int i = 0; i < cardsDealt; ++j){
-		for(int j = 0; j < num_player; ++i){
+	for(int i = 0; i < cardsDealt; ++i){
+		for(int j = 0; j < num_player - 1; ++j){ // double check num_player input
 			Card_Dealer1(j, num_playes, rpm);
 		} // end of loop j
 		// deal to the Dealer bc we cant go in a circle forever
