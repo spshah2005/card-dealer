@@ -2,6 +2,10 @@
 #include <main.c>
 #include <logic.c>
 
+// Standardizations:
+// Dealer is player 0
+// num_player is the number of physical people, does not include dealer
+
 void Card_Dealer2(int num_player){ // this call deals the cards
 	static int Cards[num_player * 3];
 	static int num_of_cards = 0;
