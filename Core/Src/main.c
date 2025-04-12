@@ -32,7 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define uint8_t MAX_PLAYERS 5; // The number of players refers to the human players, a dealer is always assumed
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,7 +57,7 @@ TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim5;
 
 /* USER CODE BEGIN PV */
-
+uint8_t num_player;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -80,6 +80,30 @@ static void MX_SPI3_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+// Creates a delay of us microseconds
+void delay(uint16_t us) {
+	__HAL_TIM_SET_COUNTER(&htim4, 0);
+	while (__HAL_TIM_GET_COUNTER(&htim4) < us);
+}
+
+// Offsets the Stepper Motor by the given angle, in the dir (direction) (0 : counter-clockwise; 1 : clockwise), at the set rpm
+void stepperOffsetAngle(float angle, uint8_t dir, uint32_t rpm) { 
+	float anglePerUpdate = 0.1125;	// Assuming an update is a 16th microstep
+	uint32_t updates = angle/anglePerUpdate;
+	if (dir) {	// clockwise
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 1);
+	}
+	else {	// counter-clockwise
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 0);
+	}
+	for (uint32_t i = 0; i < updates; ++i) {
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, 1);
+		uint16_t us = (60000000 / (200*16)) / rpm; // (60000000 / (stepsPerRev*microStepSize)) / rpm
+  delay(us);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, 0);
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -100,6 +124,16 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
+  // Initializes timer 4, channel 2 used for delay()
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+ 
+  // Initializes timer 2, channel 3 used for the Servo PWM
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1499); // Toggles Servo speed ( =1499 : stop;  <1499 : clockwise; >1499 : counter-clockwise)
+
+  // Initializes the DC Motor to off
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 0);
+ 
   /* USER CODE END Init */
 
   /* Configure the system clock */
