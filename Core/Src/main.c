@@ -196,106 +196,55 @@ void stepperOffsetAngle(float angle, uint8_t dir, uint32_t rpm) {
 }
 
 void MFRC522_WriteRegister(MFRC522_Register reg, uint8_t value) {
-
   	uint8_t txBuffer[2];
-
   	txBuffer[0] = reg;
-
   	txBuffer[1] = value;
-
   	// Select peripheral
-
   	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
-
   	// Perform interaction
-
   	HAL_SPI_Transmit(&hspi3, txBuffer, 2, HAL_MAX_DELAY);
-
   	// Free peripheral
-
   	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
+} // MFRC522_WriteRegister()
 
-  } // MFRC522_WriteRegister()
-
-
-
-  void MFRC522_WriteRegisterMulti(MFRC522_Register reg, int count, uint8_t* values) {
-
-  	// uint8_t txBuffer[2] = {reg, 0x00};
-
+void MFRC522_WriteRegisterMulti(MFRC522_Register reg, int count, uint8_t* values) {
   	// Select peripheral
-
   	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
-
   	HAL_SPI_Transmit(&hspi3, ((uint8_t*)&reg), 1, HAL_MAX_DELAY);
-
   	HAL_SPI_Transmit(&hspi3, values, count, HAL_MAX_DELAY);
-
   	// Free peripheral
-
   	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
-
-  }
-
-
+  } // MFRC522_WriteRegisterMulti()
 
   uint8_t MFRC522_ReadRegister(MFRC522_Register reg) {
-
   	uint8_t txBuffer[2];
-
   	txBuffer[0] = (reg|0x80);
-
   	txBuffer[1] = 0x00;
-
   	uint8_t rxBuffer[2];
-
   	// Select peripheral
-
   	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
-
   	// Perform read
-
   	HAL_SPI_TransmitReceive(&hspi3, txBuffer, rxBuffer, 2, HAL_MAX_DELAY);
-
   	// Free peripheral
-
   	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
-
   	// Return value read from register
-
   	return rxBuffer[1];
-
   } // MFRC522_ReadRegister()
 
-
-
   void MFRC522_ReadRegisterMulti(MFRC522_Register reg, int count, uint8_t* values) {
-
   	uint8_t read_addr = reg | 0x80;
-
   	// Select peripheral
-
   	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
-
   	HAL_SPI_Transmit(&hspi3, ((uint8_t*)&read_addr), 1, HAL_MAX_DELAY);
-
   	// Loop requesting
-
-  	for (int i = 0; i < count; i++) {
-
-  		HAL_SPI_TransmitReceive(&hspi3, ((uint8_t*)&read_addr), &values[i], 1, HAL_MAX_DELAY);
-
-  	}
-
-  	// Get final read
-
-  	HAL_SPI_TransmitReceive(&hspi3, 0x00, &values[count], 1, HAL_MAX_DELAY);
-
-  	// Free peripheral
-
-  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
-
+	for (int i = 0; i < count; i++) {
+			HAL_SPI_TransmitReceive(&hspi3, ((uint8_t*)&read_addr), &values[i], 1, HAL_MAX_DELAY);
   }
+  	// Get final read
+  	HAL_SPI_TransmitReceive(&hspi3, 0x00, &values[count], 1, HAL_MAX_DELAY);
+  	// Free peripheral
+  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
+  } // MFRC522_ReadRegisterMulti()
 
 
 
