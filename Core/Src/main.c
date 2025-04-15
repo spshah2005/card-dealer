@@ -22,11 +22,83 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "stdlib.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+/* Begin MFRC522 typedefs */
+// Registers on the MFRC522 peripheral
+typedef enum MFRC522_Register {
+  // Page 0:
+  CommandReg    = 0x01 << 1,
+  ComIEnReg     = 0x02 << 1,
+  DivIEnReg     = 0x03 << 1,
+  ComIrqReg     = 0x04 << 1,
+  DivIrqReg     = 0x05 << 1,
+  ErrorReg      = 0x06 << 1,
+  Status1Reg    = 0x07 << 1,
+  Status2Reg    = 0x08 << 1,
+  FIFODataReg   = 0x09 << 1,
+  FIFOLevelReg  = 0x0A << 1,
+  ControlReg    = 0x0C << 1,
+  BitFramingReg = 0x0D << 1,
+  CollReg				= 0x0E << 1,
+  // Page 1:
+  ModeReg				= 0x11 << 1,
+  TxModeReg     = 0x12 << 1,
+  RxModeReg     = 0x13 << 1,
+  TxControlReg  = 0x14 << 1,
+  TxASKReg			= 0x15 << 1,
+  // Page 2:
+  ModWidthReg   = 0x24 << 1,
+  TModeReg			= 0x2A << 1,
+  TPrescalerReg = 0x2B << 1,
+  TReloadRegH		= 0x2C << 1,
+  TReloadRegL 	= 0x2D << 1,
+  // Page 3:
+  AutoTestReg   = 0x36 << 1,
+  VersionReg    = 0x37 << 1
+} MFRC522_Register; // MFRC522_Register{}
+
+// Commands on the MFRC522 (written to CommandReg)
+typedef enum MFRC522_Command  {
+  Idle             = 0x00, // No action, cancels current command action
+  Mem              = 0x01, // stores 25 bytes into the internal buffer
+  GenerateRandomID = 0x02, // Generates a 10-byte random ID number
+  CalcCRC          = 0x03, // activates the CRC coprocessor or performs a self-test
+  Transmit         = 0x04, // Transmits data from the FIFO buffer
+  NoCMDChange      = 0x07, // No command change
+  Receive          = 0x08, // Receives data into the FIFO buffer
+  Transceive       = 0x0C, // Allows it to act as a receiver and transmitter
+  MFAuthent        = 0x0E, // Performs the MIFARE standard authentication as a reader
+  SoftReset        = 0x0F  // Resets the peripheral
+} MFRC522_Command; // MFRC522_Command{}
+
+// Commands sent to the PICC (card)
+typedef enum PICC_Command {
+	PICC_CMD_REQA    = 0x26, // REQuest (Type A card)
+  PICC_CMD_WUPA    = 0x52, // WakeUP  (Type A card)
+ 	PICC_CMD_CT      = 0x88, // Cascade Tag
+	PICC_CMD_SEL_CL1 = 0x93, // Used in anti-collision
+	PICC_CMD_SEL_CL2 = 0x95, // "
+	PICC_CMD_SEL_CL3 = 0x97, // "
+	PICC_CMD_HALTA   = 0x50  // Puts PICC in HALT mode
+} PICC_Command;
+
+// Return codes from functions
+typedef enum MFRC522_Status {
+	STATUS_OK,
+	STATUS_ERROR,
+	STATUS_COLLISION,
+	STATUS_TIMEOUT,
+	STATUS_NO_ROOM,
+	STATUS_INTERNAL_ERROR,
+	STATUS_INVALID,
+	STATUS_CRC_WRONG
+} MFRC522_Status;
+/* End MFRC522 typedefs  */
 
 /* USER CODE END PTD */
 
@@ -58,6 +130,25 @@ TIM_HandleTypeDef htim5;
 
 /* USER CODE BEGIN PV */
 uint8_t num_player;
+
+// Array of card uids, corresponding to the card order needed by the game logic
+const uint8_t card_uids[52][7] = {
+	{0x1D, 0x7C, 0xB5, 0x36, 0x87, 0x00, 0x00},
+	{0x1D, 0x03, 0xB5, 0x36, 0x87, 0x00, 0x00},
+}; // card_uids[]
+
+// Correct response from MFRC522 to self test ( see MFRC522_performSelfTest() )
+const uint8_t correct_self_test[64] = {
+	0x00, 0xEB, 0x66, 0xBA, 0x57, 0xBF, 0x23, 0x95,
+	0xD0, 0xE3, 0x0D, 0x3D, 0x27, 0x89, 0x5C, 0xDE,
+	0x9D, 0x3B, 0xA7, 0x00, 0x21, 0x5B, 0x89, 0x82,
+	0x51, 0x3A, 0xEB, 0x02, 0x0C, 0xA5, 0x00, 0x49,
+	0x7C, 0x84, 0x4D, 0xB3, 0xCC, 0xD2, 0x1B, 0x81,
+	0x5D, 0x48, 0x76, 0xD5, 0x71, 0x61, 0x21, 0xA9,
+	0x86, 0x96, 0x83, 0x38, 0xCF, 0x9D, 0x5B, 0x6D,
+	0xDC, 0x15, 0xBA, 0x3E, 0x7D, 0x95, 0x3B, 0x2F
+};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -133,7 +224,7 @@ int main(void)
 
   // Initializes the DC Motor to off
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 0);
- 
+	
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -157,7 +248,10 @@ int main(void)
   MX_FATFS_Init();
   MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
-
+	
+	// Initialize MFRC522 RFID module
+	MFRC522_Init();
+	
   /* USER CODE END 2 */
 
   /* Infinite loop */
