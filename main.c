@@ -18,96 +18,28 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "fatfs.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdlib.h"
 #include <string.h>
-#include "wav.h"
-#include "stm32l4xx_hal.h"  
+#include "rfid.h"
+#include "stdlib.h"
+#include "stdio.h"
+#include "stm32l4xx_hal.h"
+#include "ps2.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-/* Begin MFRC522 typedefs */
-// Registers on the MFRC522 peripheral
-typedef enum MFRC522_Register {
-  // Page 0:
-  CommandReg    = 0x01 << 1,
-  ComIEnReg     = 0x02 << 1,
-  DivIEnReg     = 0x03 << 1,
-  ComIrqReg     = 0x04 << 1,
-  DivIrqReg     = 0x05 << 1,
-  ErrorReg      = 0x06 << 1,
-  Status1Reg    = 0x07 << 1,
-  Status2Reg    = 0x08 << 1,
-  FIFODataReg   = 0x09 << 1,
-  FIFOLevelReg  = 0x0A << 1,
-  ControlReg    = 0x0C << 1,
-  BitFramingReg = 0x0D << 1,
-  CollReg				= 0x0E << 1,
-  // Page 1:
-  ModeReg				= 0x11 << 1,
-  TxModeReg     = 0x12 << 1,
-  RxModeReg     = 0x13 << 1,
-  TxControlReg  = 0x14 << 1,
-  TxASKReg			= 0x15 << 1,
-  // Page 2:
-  ModWidthReg   = 0x24 << 1,
-  TModeReg			= 0x2A << 1,
-  TPrescalerReg = 0x2B << 1,
-  TReloadRegH		= 0x2C << 1,
-  TReloadRegL 	= 0x2D << 1,
-  // Page 3:
-  AutoTestReg   = 0x36 << 1,
-  VersionReg    = 0x37 << 1
-} MFRC522_Register; // MFRC522_Register{}
 
-// Commands on the MFRC522 (written to CommandReg)
-typedef enum MFRC522_Command  {
-  Idle             = 0x00, // No action, cancels current command action
-  Mem              = 0x01, // stores 25 bytes into the internal buffer
-  GenerateRandomID = 0x02, // Generates a 10-byte random ID number
-  CalcCRC          = 0x03, // activates the CRC coprocessor or performs a self-test
-  Transmit         = 0x04, // Transmits data from the FIFO buffer
-  NoCMDChange      = 0x07, // No command change
-  Receive          = 0x08, // Receives data into the FIFO buffer
-  Transceive       = 0x0C, // Allows it to act as a receiver and transmitter
-  MFAuthent        = 0x0E, // Performs the MIFARE standard authentication as a reader
-  SoftReset        = 0x0F  // Resets the peripheral
-} MFRC522_Command; // MFRC522_Command{}
-
-// Commands sent to the PICC (card)
-typedef enum PICC_Command {
-	PICC_CMD_REQA    = 0x26, // REQuest (Type A card)
-  PICC_CMD_WUPA    = 0x52, // WakeUP  (Type A card)
- 	PICC_CMD_CT      = 0x88, // Cascade Tag
-	PICC_CMD_SEL_CL1 = 0x93, // Used in anti-collision
-	PICC_CMD_SEL_CL2 = 0x95, // "
-	PICC_CMD_SEL_CL3 = 0x97, // "
-	PICC_CMD_HALTA   = 0x50  // Puts PICC in HALT mode
-} PICC_Command;
-
-// Return codes from functions
-typedef enum MFRC522_Status {
-	STATUS_OK,
-	STATUS_ERROR,
-	STATUS_COLLISION,
-	STATUS_TIMEOUT,
-	STATUS_NO_ROOM,
-	STATUS_INTERNAL_ERROR,
-	STATUS_INVALID,
-	STATUS_CRC_WRONG
-} MFRC522_Status;
-/* End MFRC522 typedefs  */
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define uint8_t MAX_PLAYERS 5; // The number of players refers to the human players, a dealer is always assumed
+#define MAX_PLAYERS 5 // The number of players refers to the human players, a dealer is always assumed
 #define HX711_TIMEOUT 1000000  // Prevent infinite loop for HX711 Load Cell Sensor
 #define HX711_DATA_GPIO   GPIOB
 #define HX711_DATA_PIN    GPIO_PIN_0   // HX711 DT → PA1
@@ -129,8 +61,6 @@ DMA_HandleTypeDef hdma_dac1_ch2;
 
 UART_HandleTypeDef hlpuart1;
 
-SD_HandleTypeDef hsd1;
-
 SPI_HandleTypeDef hspi2;
 SPI_HandleTypeDef hspi3;
 
@@ -141,29 +71,14 @@ TIM_HandleTypeDef htim5;
 
 /* USER CODE BEGIN PV */
 uint8_t num_player;
-
-// Array of card uids, corresponding to the card order needed by the game logic
-const uint8_t card_uids[52][7] = {
-	{0x1D, 0x7C, 0xB5, 0x36, 0x87, 0x00, 0x00},
-	{0x1D, 0x03, 0xB5, 0x36, 0x87, 0x00, 0x00},
-}; // card_uids[]
-
-// Correct response from MFRC522 to self test ( see MFRC522_performSelfTest() )
-const uint8_t correct_self_test[64] = {
-	0x00, 0xEB, 0x66, 0xBA, 0x57, 0xBF, 0x23, 0x95,
-	0xD0, 0xE3, 0x0D, 0x3D, 0x27, 0x89, 0x5C, 0xDE,
-	0x9D, 0x3B, 0xA7, 0x00, 0x21, 0x5B, 0x89, 0x82,
-	0x51, 0x3A, 0xEB, 0x02, 0x0C, 0xA5, 0x00, 0x49,
-	0x7C, 0x84, 0x4D, 0xB3, 0xCC, 0xD2, 0x1B, 0x81,
-	0x5D, 0x48, 0x76, 0xD5, 0x71, 0x61, 0x21, 0xA9,
-	0x86, 0x96, 0x83, 0x38, 0xCF, 0x9D, 0x5B, 0x6D,
-	0xDC, 0x15, 0xBA, 0x3E, 0x7D, 0x95, 0x3B, 0x2F
-};
- //load cell timer
+//load cell timer
 TIM_HandleTypeDef *HX711_Timer;
 //ps2 contoller
 PS2Buttons *PS2_PS2;
 TIM_HandleTypeDef *PS2_TIMER;
+
+#define NSS_BANK GPIOG
+#define NSS_PIN GPIO_PIN_12
 
 /* USER CODE END PV */
 
@@ -173,7 +88,6 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_LPUART1_UART_Init(void);
-static void MX_SDMMC1_SD_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
@@ -186,17 +100,6 @@ static void MX_SPI3_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-#define BUFSIZE 512
-
-#define MIN(a,b) (((a)<(b))? (a):(b))
-typedef void (*funcP)(uint8_t channels, uint16_t numSamples, void *pIn, uint16_t *pOutput);
-
-uint8_t flg_dma_done;
-
-static uint8_t fileBuffer[BUFSIZE];
-static uint8_t dmaBuffer[2][BUFSIZE];
-static uint8_t dmaBank = 0;
 
 // Creates a delay of us microseconds
 void delay(uint16_t us) {
@@ -223,1094 +126,519 @@ void stepperOffsetAngle(float angle, uint8_t dir, uint32_t rpm) {
 }
 
 void MFRC522_WriteRegister(MFRC522_Register reg, uint8_t value) {
-  	uint8_t txBuffer[2];
-  	txBuffer[0] = reg;
-  	txBuffer[1] = value;
-  	// Select peripheral
-  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
-  	// Perform interaction
-  	HAL_SPI_Transmit(&hspi3, txBuffer, 2, HAL_MAX_DELAY);
-  	// Free peripheral
-  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
+  uint8_t txBuffer[2];
+  txBuffer[0] = reg;
+  txBuffer[1] = value;
+  // Select peripheral
+  HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
+  // Perform interaction
+  HAL_SPI_Transmit(&hspi3, txBuffer, 2, HAL_MAX_DELAY);
+  // Free peripheral
+  HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
 } // MFRC522_WriteRegister()
 
 void MFRC522_WriteRegisterMulti(MFRC522_Register reg, int count, uint8_t* values) {
-  	// Select peripheral
-  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
-  	HAL_SPI_Transmit(&hspi3, ((uint8_t*)&reg), 1, HAL_MAX_DELAY);
-  	HAL_SPI_Transmit(&hspi3, values, count, HAL_MAX_DELAY);
-  	// Free peripheral
-  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
-  } // MFRC522_WriteRegisterMulti()
+  // uint8_t txBuffer[2] = {reg, 0x00};
+  // Select peripheral
+  HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(&hspi3, ((uint8_t*)&reg), 1, HAL_MAX_DELAY);
+  HAL_SPI_Transmit(&hspi3, values, count, HAL_MAX_DELAY);
+  // Free peripheral
+  HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
+}
 
-  uint8_t MFRC522_ReadRegister(MFRC522_Register reg) {
-  	uint8_t txBuffer[2];
-  	txBuffer[0] = (reg|0x80);
-  	txBuffer[1] = 0x00;
-  	uint8_t rxBuffer[2];
-  	// Select peripheral
-  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
-  	// Perform read
-  	HAL_SPI_TransmitReceive(&hspi3, txBuffer, rxBuffer, 2, HAL_MAX_DELAY);
-  	// Free peripheral
-  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
-  	// Return value read from register
-  	return rxBuffer[1];
-  } // MFRC522_ReadRegister()
+uint8_t MFRC522_ReadRegister(MFRC522_Register reg) {
+  uint8_t txBuffer[2];
+  txBuffer[0] = (reg|0x80);
+  txBuffer[1] = 0x00;
+  uint8_t rxBuffer[2];
+  // Select peripheral
+  HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
+  // Perform read
+  HAL_SPI_TransmitReceive(&hspi3, txBuffer, rxBuffer, 2, HAL_MAX_DELAY);
+  // Free peripheral
+  HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
+  // Return value read from register
+  return rxBuffer[1];
+} // MFRC522_ReadRegister()
 
-  void MFRC522_ReadRegisterMulti(MFRC522_Register reg, int count, uint8_t* values) {
-  	uint8_t read_addr = reg | 0x80;
-  	// Select peripheral
-  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
-  	HAL_SPI_Transmit(&hspi3, ((uint8_t*)&read_addr), 1, HAL_MAX_DELAY);
-  	// Loop requesting
-	for (int i = 0; i < count; i++) {
-			HAL_SPI_TransmitReceive(&hspi3, ((uint8_t*)&read_addr), &values[i], 1, HAL_MAX_DELAY);
+void MFRC522_ReadRegisterMulti(MFRC522_Register reg, int count, uint8_t* values) {
+  uint8_t read_addr = reg | 0x80;
+  // Select peripheral
+  HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(&hspi3, ((uint8_t*)&read_addr), 1, HAL_MAX_DELAY);
+  // Loop requesting
+  for (int i = 0; i < count; i++) {
+  HAL_SPI_TransmitReceive(&hspi3, ((uint8_t*)&read_addr), &values[i], 1, HAL_MAX_DELAY);
   }
-  	// Get final read
-  	HAL_SPI_TransmitReceive(&hspi3, 0x00, &values[count], 1, HAL_MAX_DELAY);
-  	// Free peripheral
-  	HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
-  } // MFRC522_ReadRegisterMulti()
+  // Get final read
+  HAL_SPI_TransmitReceive(&hspi3, 0x00, &values[count], 1, HAL_MAX_DELAY);
+  // Free peripheral
+  HAL_GPIO_WritePin(NSS_BANK, NSS_PIN, GPIO_PIN_SET);
+}
 
+void MFRC522_Reset() {
+  // Write the reset command to CommandReg
+  MFRC522_WriteRegister(CommandReg, SoftReset);
+} // MFRC522_Reset()
 
+void MFRC522_ResetBaudAndModWidth() {
+ 	// Reset baud rates
+ 	MFRC522_WriteRegister(TxModeReg, 0x00); // 0b 0[010] 0000
+ 	MFRC522_WriteRegister(RxModeReg, 0x00);
+ 	// Reset modulation width
+ 	MFRC522_WriteRegister(ModWidthReg, 0x26);
+}
 
-  void MFRC522_Reset() {
+void MFRC522_Init() {
+  // Perform a garbage write first (if this works, it doesn't matter)
+  MFRC522_WriteRegister(CommandReg, Idle);
+  // Perform a soft reset
+  MFRC522_Reset();
 
-  	// Write the reset command to CommandReg
+  MFRC522_ResetBaudAndModWidth();
 
-  	MFRC522_WriteRegister(CommandReg, SoftReset);
+  // Setup timeout
+  MFRC522_WriteRegister(TModeReg, 0x80);
+  MFRC522_WriteRegister(TPrescalerReg, 0xA9);
+  MFRC522_WriteRegister(TReloadRegH, 0x03);
+  MFRC522_WriteRegister(TReloadRegL, 0xE8);
 
-  } // MFRC522_Reset()
+  MFRC522_WriteRegister(TxASKReg, 0x40);
+  MFRC522_WriteRegister(ModeReg, 0x3D);
+  // Turn on the antenna
+  uint8_t value = MFRC522_ReadRegister(TxControlReg);
+  if ((value & 0x03) != 0x03) {
+  	MFRC522_WriteRegister(TxControlReg, value | 0x03);
+  } // if
+} // MFRC522_Init()
 
+void MFRC522_printVersion() {
+  uint8_t version = MFRC522_ReadRegister(VersionReg);
+  printf("version: %X\n\r", version);
+} // MFRC522_printVersion()
 
+// Returns 0 if the self test performed correctly, -1 otherwise
+int MFRC522_performSelfTest() {
 
-  void MFRC522_ResetBaudAndModWidth() {
+  // 1. Soft Reset
+  MFRC522_Reset();
 
-	  // Reset baud rates
+  // 2. Clear internal buffer by writing 25 bytes of 0x00
+  MFRC522_WriteRegister(FIFOLevelReg, 0x80); // flush FIFO buffer
+  uint8_t zeroes[25] = {0x00};
+  MFRC522_WriteRegisterMulti(FIFODataReg, 25, zeroes);
+  MFRC522_WriteRegister(CommandReg, Mem); // transfer to internal buffer
 
-	  MFRC522_WriteRegister(TxModeReg, 0x00); // 0b 0[010] 0000
+  // 3. Enable self-test
+  MFRC522_WriteRegister(AutoTestReg, 0x09);
 
-	  MFRC522_WriteRegister(RxModeReg, 0x00);
+  // 4. Write 0x00 to the FIFO buffer
+  MFRC522_WriteRegister(FIFODataReg, 0x00);
 
-	  // Reset modulation width
+  // 5. Start self-test by issuing the CalcCRC command
+  MFRC522_WriteRegister(CommandReg, CalcCRC);
 
-	  MFRC522_WriteRegister(ModWidthReg, 0x26);
+  // 6. Wait for self-test to complete
+  HAL_Delay(500);
 
-  }
+  // 7. Read out resulting 64 bytes from the FIFO buffer
+  uint8_t result[64];
+  MFRC522_ReadRegisterMulti(FIFODataReg, 64, result);
 
+  // Reset AutoTestReg
+  MFRC522_WriteRegister(AutoTestReg, 0x00);
+  // Re-init: (otherwise everything breaks)
+  MFRC522_Init();
 
+  // Compare result to the desired value
+  for (int i = 0; i < 64; i++) {
+  	if (result[i] != correct_self_test[i]) {
+  		return -1;
+  	}
+  } // for
+  // All good :)
+  return 0;
 
-  void MFRC522_Init() {
+} // MFRC522_performSelfTest()
 
-  	// Perform a garbage write first (if this works, it doesn't matter)
+MFRC522_Status MFRC522_CommunicateWithPICC(MFRC522_Command command, uint8_t waitIRq, uint8_t* sendData, uint8_t sendLen, uint8_t* backData, uint8_t* backLen, uint8_t* validBits) {
+  uint8_t bitFraming = *validBits;
+  MFRC522_WriteRegister(CommandReg, Idle);
+  MFRC522_WriteRegister(ComIrqReg, 0x7F);
+  MFRC522_WriteRegister(FIFOLevelReg, 0x80);
+  MFRC522_WriteRegisterMulti(FIFODataReg, sendLen, sendData);
+  MFRC522_WriteRegister(BitFramingReg, bitFraming);
+  MFRC522_WriteRegister(CommandReg, command);
+  if (command == Transceive) {
+  	uint8_t value = 0x80 | MFRC522_ReadRegister(BitFramingReg);
+  	MFRC522_WriteRegister(BitFramingReg, value);
+  } // if
 
-  	MFRC522_WriteRegister(CommandReg, Idle);
-
-  	// Perform a soft reset
-
-  	MFRC522_Reset();
-
-
-
-  	MFRC522_ResetBaudAndModWidth();
-
-
-
-  	// Setup timeout
-
-  	MFRC522_WriteRegister(TModeReg, 0x80);
-
-  	MFRC522_WriteRegister(TPrescalerReg, 0xA9);
-
-  	MFRC522_WriteRegister(TReloadRegH, 0x03);
-
-  	MFRC522_WriteRegister(TReloadRegL, 0xE8);
-
-
-
-  	MFRC522_WriteRegister(TxASKReg, 0x40);
-
-  	MFRC522_WriteRegister(ModeReg, 0x3D);
-
-  	// Turn on the antenna
-
-  	uint8_t value = MFRC522_ReadRegister(TxControlReg);
-
-  	if ((value & 0x03) != 0x03) {
-
-  		MFRC522_WriteRegister(TxControlReg, value | 0x03);
-
+  // 36ms, worst-case scenario
+  uint32_t start = 0;
+  uint32_t deadline = 36; // 32ms
+  int completed = 0;
+  while(!completed && start < deadline) {
+  	uint8_t n = MFRC522_ReadRegister(ComIrqReg);
+  	if (n & waitIRq) {
+  		completed = 1;
+  		break;
   	} // if
-
-  } // MFRC522_Init()
-
-
-
-  void MFRC522_printVersion() {
-
-  	uint8_t version = MFRC522_ReadRegister(VersionReg);
-
-  	printf("version: %X\n\r", version);
-
-  } // MFRC522_printVersion()
-
-
-
-  // Returns 0 if the self test performed correctly, -1 otherwise
-
-  int MFRC522_performSelfTest() {
-
-
-
-  	// 1. Soft Reset
-
-  	MFRC522_Reset();
-
-
-
-  	// 2. Clear internal buffer by writing 25 bytes of 0x00
-
-  	MFRC522_WriteRegister(FIFOLevelReg, 0x80); // flush FIFO buffer
-
-  	uint8_t zeroes[25] = {0x00};
-
-  	MFRC522_WriteRegisterMulti(FIFODataReg, 25, zeroes);
-
-  	MFRC522_WriteRegister(CommandReg, Mem); // transfer to internal buffer
-
-
-
-  	// 3. Enable self-test
-
-  	MFRC522_WriteRegister(AutoTestReg, 0x09);
-
-
-
-  	// 4. Write 0x00 to the FIFO buffer
-
-  	MFRC522_WriteRegister(FIFODataReg, 0x00);
-
-
-
-  	// 5. Start self-test by issuing the CalcCRC command
-
-  	MFRC522_WriteRegister(CommandReg, CalcCRC);
-
-
-
-  	// 6. Wait for self-test to complete
-
-  	HAL_Delay(500);
-
-
-
-  	// 7. Read out resulting 64 bytes from the FIFO buffer
-
-  	uint8_t result[64];
-
-  	MFRC522_ReadRegisterMulti(FIFODataReg, 64, result);
-
-
-
-  	// Reset AutoTestReg
-
-  	MFRC522_WriteRegister(AutoTestReg, 0x00);
-
-  	// Re-init:
-
-  	MFRC522_Init();
-
-
-
-  	// Compare result to the desired value
-
-  	for (int i = 0; i < 64; i++) {
-
-  		if (result[i] != correct_self_test[i]) {
-
-  			return -1;
-
-  		}
-
-  	}
-
-  	// All good :)
-
-  	return 0;
-
-
-
-  } // MFRC522_performSelfTest()
-
-
-
-  Status MFRC522_CommunicateWithPICC(MFRC522_Command command, uint8_t waitIRq, uint8_t* sendData, uint8_t sendLen, uint8_t* backData, uint8_t* backLen, uint8_t* validBits) {
-
-  	uint8_t bitFraming = *validBits;
-
-  	MFRC522_WriteRegister(CommandReg, Idle);
-
-  	MFRC522_WriteRegister(ComIrqReg, 0x7F);
-
-  	MFRC522_WriteRegister(FIFOLevelReg, 0x80);
-
-  	MFRC522_WriteRegisterMulti(FIFODataReg, sendLen, sendData);
-
-  	MFRC522_WriteRegister(BitFramingReg, bitFraming);
-
-  	MFRC522_WriteRegister(CommandReg, command);
-
-  	if (command == Transceive) {
-
-  		uint8_t value = 0x80 | MFRC522_ReadRegister(BitFramingReg);
-
-  		MFRC522_WriteRegister(BitFramingReg, value);
-
-  	}
-
-
-
-  	// 36ms, worst-case scenario
-
-  	uint32_t start = 0;
-
-  	uint32_t deadline = 36; // 32ms
-
-  	int completed = 0;
-
-  	while(!completed && start < deadline) {
-
-  		uint8_t n = MFRC522_ReadRegister(ComIrqReg);
-
-  		if (n & waitIRq) {
-
-  			completed = 1;
-
-  			break;
-
-  		}
-
-  		/* if (n & 0x01) {
-
-  			return STATUS_TIMEOUT;
-
-  		}*/
-
-  		HAL_Delay(1);
-
-  		start++;
-
-  	} // while
-
-
-
-  	if (!completed) {
-
-  		// printf("| timing out from the TRANSCEIVE command!\r\n");
-
-  		return STATUS_TIMEOUT;
-
-  	}
-
-
-
-  	uint8_t errorRegValue = MFRC522_ReadRegister(ErrorReg);
-
-  	if (errorRegValue & 0x13) {
-
-  		return STATUS_ERROR;
-
-  	}
-
-
-
-  	uint8_t _validBits = 0;
-
-  	if (backData != NULL && backLen != NULL) {
-
-  		uint8_t n = MFRC522_ReadRegister(FIFOLevelReg);
-
-  		if (n > *backLen) {
-
-  			return STATUS_NO_ROOM;
-
-  		}
-
-  		*backLen = n;
-
-  		MFRC522_ReadRegisterMulti(FIFODataReg, n, backData);
-
-  		_validBits = MFRC522_ReadRegister(ControlReg) & 0x07;
-
-  		if (validBits != NULL) {
-
-  			*validBits = _validBits;
-
-  		}
-
-  	}
-
-
-
-  	// Tell about collisions
-
-  	if (errorRegValue & 0x08) {
-
-  		return STATUS_COLLISION;
-
-  	}
-
-
-
-  	return STATUS_OK;
-
-
-
-  } // MFRC522_CommunicateWithPICC()
-
-
-
-  Status MFRC522_TransceiveData(uint8_t* sendData, uint8_t sendLen, uint8_t* backData, uint8_t* backLen, uint8_t* validBits) {
-
-  	uint8_t waitIrq = 0x30;
-
-  	return MFRC522_CommunicateWithPICC(Transceive, waitIrq, sendData, sendLen, backData, backLen, validBits);
-
+  /* if (n & 0x01) {
+  return STATUS_TIMEOUT;
+  }*/
+  	HAL_Delay(1);
+  	start++;
+  } // while
+
+  if (!completed) {
+  	// printf("| timing out from the TRANSCEIVE command!\r\n");
+  	return STATUS_TIMEOUT;
   }
 
+  uint8_t errorRegValue = MFRC522_ReadRegister(ErrorReg);
+  if (errorRegValue & 0x13) {
+  	return STATUS_ERROR;
+  }
 
-
-  Status MFRC522_REQA_or_WUPA(PICC_Command command, uint8_t* bufferATQA, uint8_t* bufferSize) {
-
-  	uint8_t validBits;
-
-  	Status status;
-
-
-
-  	if (bufferATQA == NULL || *bufferSize < 2) {
-
+  uint8_t _validBits = 0;
+  if (backData != NULL && backLen != NULL) {
+  	uint8_t n = MFRC522_ReadRegister(FIFOLevelReg);
+  	if (n > *backLen) {
   		return STATUS_NO_ROOM;
-
   	}
-
-  	// Clear CollReg MSB
-
-  	uint8_t value = MFRC522_ReadRegister(CollReg);
-
-  	value &= ~(0x80);
-
-  	MFRC522_WriteRegister(CollReg, value);
-
-
-
-  	validBits = 7;
-
-  	status = MFRC522_TransceiveData(&command, 1, bufferATQA, bufferSize, &validBits);
-
-  	if (status != STATUS_OK) {
-
-  		return status;
-
+  	*backLen = n;
+  	MFRC522_ReadRegisterMulti(FIFODataReg, n, backData);
+  	_validBits = MFRC522_ReadRegister(ControlReg) & 0x07;
+  	if (validBits != NULL) {
+  		*validBits = _validBits;
   	}
+  } // if
 
-  	if (*bufferSize != 2 || validBits != 0) {
+  // Tell about collisions
+  if (errorRegValue & 0x08) {
+  	return STATUS_COLLISION;
+  }
 
-  		return STATUS_ERROR;
+  return STATUS_OK;
 
-  	}
+} // MFRC522_CommunicateWithPICC()
 
+MFRC522_Status MFRC522_TransceiveData(uint8_t* sendData, uint8_t sendLen, uint8_t* backData, uint8_t* backLen, uint8_t* validBits) {
+  uint8_t waitIrq = 0x30;
+  	return MFRC522_CommunicateWithPICC(Transceive, waitIrq, sendData, sendLen, backData, backLen, validBits);
+  }
+
+MFRC522_Status MFRC522_REQA_or_WUPA(PICC_Command command, uint8_t* bufferATQA, uint8_t* bufferSize) {
+  uint8_t validBits;
+  MFRC522_Status status;
+
+  if (bufferATQA == NULL || *bufferSize < 2) {
+  	return STATUS_NO_ROOM;
+  }
+  // Clear CollReg MSB
+  uint8_t value = MFRC522_ReadRegister(CollReg);
+  value &= ~(0x80);
+  MFRC522_WriteRegister(CollReg, value);
+
+  validBits = 7;
+  status = MFRC522_TransceiveData(&command, 1, bufferATQA, bufferSize, &validBits);
+  if (status != STATUS_OK) {
+  	return status;
+  }
+  if (*bufferSize != 2 || validBits != 0) {
+	  return STATUS_ERROR;
+  }
   	return STATUS_OK;
-
   }
 
+MFRC522_Status MFRC522_RequestA(uint8_t* bufferATQA, uint8_t *bufferSize) {
+  return MFRC522_REQA_or_WUPA(PICC_CMD_REQA, bufferATQA, bufferSize);
+} // MFRC522_RequestA()
 
-
-  Status MFRC522_RequestA(uint8_t* bufferATQA, uint8_t *bufferSize) {
-
-  	return MFRC522_REQA_or_WUPA(PICC_CMD_REQA, bufferATQA, bufferSize);
-
-  }
-
-
-
-  Status MFRC522_WakeUpA(uint8_t* bufferATQA, uint8_t *bufferSize) {
-
+MFRC522_Status MFRC522_WakeUpA(uint8_t* bufferATQA, uint8_t *bufferSize) {
 	return MFRC522_REQA_or_WUPA(PICC_CMD_WUPA, bufferATQA, bufferSize);
+} // MFRC522_WakeUpA
 
-  }
+int MFRC522_IsNewCardPresent() {
+  uint8_t bufferATQA[2];
+  uint8_t bufferSize = sizeof(bufferATQA);
 
+  MFRC522_ResetBaudAndModWidth();
 
+  MFRC522_Status result = MFRC522_RequestA(bufferATQA, &bufferSize);
+  // printf("Status: %d\r\n",  (uint8_t)result);
+  return (result == STATUS_OK || result == STATUS_COLLISION);
+} // MFRC522_IsNewCardPresent()
 
-  int MFRC522_IsNewCardPresent() {
+MFRC522_Status MFRC522_CalculateCRC(uint8_t* data, uint8_t length, uint8_t* result) {
+ MFRC522_WriteRegister(CommandReg, Idle);
+ MFRC522_WriteRegister(DivIrqReg, 0x04);
+ MFRC522_WriteRegister(FIFOLevelReg, 0x80);
+ MFRC522_WriteRegisterMulti(FIFODataReg, length, data);
+ MFRC522_WriteRegister(CommandReg, CalcCRC);
 
-  	uint8_t bufferATQA[2];
+ // TODO: fix
+ HAL_Delay(89);
 
-  	uint8_t bufferSize = sizeof(bufferATQA);
-
-
-
-  	MFRC522_ResetBaudAndModWidth();
-
-
-
-  	Status result = MFRC522_RequestA(bufferATQA, &bufferSize);
-
-  	// printf("Status: %d\r\n",  (uint8_t)result);
-
-  	return (result == STATUS_OK || result == STATUS_COLLISION);
-
-  }
-
-
-
-  Status MFRC522_CalculateCRC(uint8_t* data, uint8_t length, uint8_t* result) {
-
-	  MFRC522_WriteRegister(CommandReg, Idle);
-
-	  MFRC522_WriteRegister(DivIrqReg, 0x04);
-
-	  MFRC522_WriteRegister(FIFOLevelReg, 0x80);
-
-	  MFRC522_WriteRegisterMulti(FIFODataReg, length, data);
-
-	  MFRC522_WriteRegister(CommandReg, CalcCRC);
-
-
-
-	  // TODO: fix
-
-	  HAL_Delay(89);
-
-
-
-	  // Check about timeout
-
-	  uint8_t value = MFRC522_ReadRegister(DivIrqReg);
-
-	  if (!(value & 0x04)) {
-
-		  // DEBUG:
-
-		  printf("timed out of calc CRC command\r\n");
-
-		  return STATUS_TIMEOUT;
-
-	  }
-
-	  // Get the CRC value
-
-	  MFRC522_WriteRegister(CommandReg, Idle);
-
-	  result[0] = MFRC522_ReadRegister(CRCResultRegL);
-
-	  result[1] = MFRC522_ReadRegister(CRCResultRegH);
-
-	  return STATUS_OK;
-
+ // Check about timeout
+ uint8_t value = MFRC522_ReadRegister(DivIrqReg);
+ if (!(value & 0x04)) {
+ // DEBUG:
+ printf("timed out of calc CRC command\r\n");
+ return STATUS_TIMEOUT;
+ }
+ // Get the CRC value
+ MFRC522_WriteRegister(CommandReg, Idle);
+// result[0] = MFRC522_ReadRegister(CRCResultRegL); FIX NO REG W THIS NAME FOUND
+// result[1] = MFRC522_ReadRegister(CRCResultRegH);
+ return STATUS_OK;
   } // MFRC522_CalculateCRC()
 
-
-
-  Status MFRC522_Select(uint8_t uid[7]) {
-
+MFRC522_Status MFRC522_Select(uint8_t uid[7]) {
 	int8_t validBits = 0;
+  int uidComplete;
+  int selectDone;
+  int useCascadeTag;
+  uint8_t cascadeLevel = 1;
+  MFRC522_Status result;
+  uint8_t count;
+  uint8_t checkBit;
+  uint8_t index;
+  uint8_t uidIndex; // The first index in uid->uidByte[] that is used in the current Cascade Level.
+  int8_t currentLevelKnownBits; // The number of known UID bits in the current Cascade Level.
+  uint8_t buffer[9]; // The SELECT/ANTICOLLISION commands uses a 7 byte standard frame + 2 bytes CRC_A
+  uint8_t bufferUsed; // The number of bytes used in the buffer, ie the number of bytes to transfer to the FIFO.
+  uint8_t rxAlign; // Used in BitFramingReg. Defines the bit position for the first bit received.
+  uint8_t txLastBits; // Used in BitFramingReg. The number of valid bits in the last transmitted byte.
+  uint8_t *responseBuffer;
+  uint8_t responseLength;
 
-  	int uidComplete;
+  // Description of buffer structure:
+  // Byte 0: SEL Indicates the Cascade Level: PICC_CMD_SEL_CL1, PICC_CMD_SEL_CL2 or PICC_CMD_SEL_CL3
+  // Byte 1: NVB Number of Valid Bits (in complete command, not just the UID): High nibble: complete bytes, Low nibble: Extra bits.
+  // Byte 2: UID-data or CT See explanation below. CT means Cascade Tag.
+  // Byte 3: UID-data
+  // Byte 4: UID-data
+  // Byte 5: UID-data
+  // Byte 6: BCC Block Check Character - XOR of bytes 2-5
+  // Byte 7: CRC_A
+  // Byte 8: CRC_A
+  // The BCC and CRC_A are only transmitted if we know all the UID bits of the current Cascade Level.
+  //
+  // Description of bytes 2-5: (Section 6.5.4 of the ISO/IEC 14443-3 draft: UID contents and cascade levels)
+  // UID size Cascade level Byte2 Byte3 Byte4 Byte5
+  // ======== ============= ===== ===== ===== =====
+  // 7 bytes 1 CT uid0 uid1 uid2
+  // 2 uid3 uid4 uid5 uid6
 
-  	int selectDone;
+  // Sanity checks
+  if (validBits > 80) {
+  	return STATUS_INVALID;
+  }
 
-  	int useCascadeTag;
+  // Prepare MFRC522
+  uint8_t value = MFRC522_ReadRegister(CollReg);
+  value &= ~(0x80);
+  MFRC522_WriteRegister(CollReg, value);
 
-  	uint8_t cascadeLevel = 1;
+  // Repeat Cascade Level loop until we have a complete UID.
+  uidComplete = 0;
+  while (!uidComplete) {
+  // Set the Cascade Level in the SEL byte, find out if we need to use the Cascade Tag in byte 2.
+  	switch (cascadeLevel) {
+  		case 1:
+  		buffer[0] = PICC_CMD_SEL_CL1;
+  		uidIndex = 0;
+  		useCascadeTag = validBits; // When we know that the UID has more than 4 bytes
+  		break;
 
-  	Status result;
+ 		case 2:
+  		buffer[0] = PICC_CMD_SEL_CL2;
+  		uidIndex = 3;
+  		useCascadeTag = 0; // When we know that the UID has more than 7 bytes
+  		break;
 
-  	uint8_t count;
+  	case 3:
+  		buffer[0] = PICC_CMD_SEL_CL3;
+  		uidIndex = 6;
+  		useCascadeTag = 0; // Never used in CL3.
+  		break;
 
-  	uint8_t checkBit;
+  	default:
+  		return STATUS_INTERNAL_ERROR;
+  		break; // Redundant break statement go brrr
+  	} // switch
 
-  	uint8_t index;
-
-  	uint8_t uidIndex;					// The first index in uid->uidByte[] that is used in the current Cascade Level.
-
-  	int8_t currentLevelKnownBits;		// The number of known UID bits in the current Cascade Level.
-
-  	uint8_t buffer[9];					// The SELECT/ANTICOLLISION commands uses a 7 byte standard frame + 2 bytes CRC_A
-
-  	uint8_t bufferUsed;				// The number of bytes used in the buffer, ie the number of bytes to transfer to the FIFO.
-
-  	uint8_t rxAlign;					// Used in BitFramingReg. Defines the bit position for the first bit received.
-
-  	uint8_t txLastBits;				// Used in BitFramingReg. The number of valid bits in the last transmitted byte.
-
-  	uint8_t *responseBuffer;
-
-  	uint8_t responseLength;
-
-
-
-  	// Description of buffer structure:
-
-  	//		Byte 0: SEL 				Indicates the Cascade Level: PICC_CMD_SEL_CL1, PICC_CMD_SEL_CL2 or PICC_CMD_SEL_CL3
-
-  	//		Byte 1: NVB					Number of Valid Bits (in complete command, not just the UID): High nibble: complete bytes, Low nibble: Extra bits.
-
-  	//		Byte 2: UID-data or CT		See explanation below. CT means Cascade Tag.
-
-  	//		Byte 3: UID-data
-
-  	//		Byte 4: UID-data
-
-  	//		Byte 5: UID-data
-
-  	//		Byte 6: BCC					Block Check Character - XOR of bytes 2-5
-
-  	//		Byte 7: CRC_A
-
-  	//		Byte 8: CRC_A
-
-  	// The BCC and CRC_A are only transmitted if we know all the UID bits of the current Cascade Level.
-
-  	//
-
-  	// Description of bytes 2-5: (Section 6.5.4 of the ISO/IEC 14443-3 draft: UID contents and cascade levels)
-
-  	//		UID size	Cascade level	Byte2	Byte3	Byte4	Byte5
-
-  	//		========	=============	=====	=====	=====	=====
-
-  	//		 7 bytes		1			CT		uid0	uid1	uid2
-
-  	//						2			uid3	uid4	uid5	uid6
-
-
-
-  	// Sanity checks
-
-  	if (validBits > 80) {
-
-  		return STATUS_INVALID;
-
+  // How many UID bits are known in this Cascade Level?
+  currentLevelKnownBits = validBits - (8 * uidIndex);
+  	if (currentLevelKnownBits < 0) {
+  	currentLevelKnownBits = 0;
+  }
+  // Copy the known bits from uid->uidByte[] to buffer[]
+  index = 2; // destination index in buffer[]
+  if (useCascadeTag) {
+  	buffer[index] = PICC_CMD_CT;
+  	index++;
+  }
+  uint8_t bytesToCopy = currentLevelKnownBits / 8 + (currentLevelKnownBits % 8 ? 1 : 0); // The number of bytes needed to represent the known bits for this level.
+  if (bytesToCopy) {
+  	uint8_t maxBytes = useCascadeTag ? 3 : 4; // Max 4 bytes in each Cascade Level. Only 3 left if we use the Cascade Tag
+  	if (bytesToCopy > maxBytes) {
+  		bytesToCopy = maxBytes;
   	}
-
-
-
-  	// Prepare MFRC522
-
-  	uint8_t value = MFRC522_ReadRegister(CollReg);
-
-  	value &= ~(0x80);
-
-  	MFRC522_WriteRegister(CollReg, value);
-
-
-
-  	// Repeat Cascade Level loop until we have a complete UID.
-
-  	uidComplete = 0;
-
-  	while (!uidComplete) {
-
-  		// Set the Cascade Level in the SEL byte, find out if we need to use the Cascade Tag in byte 2.
-
-  		switch (cascadeLevel) {
-
-  			case 1:
-
-  				buffer[0] = PICC_CMD_SEL_CL1;
-
-  				uidIndex = 0;
-
-  				useCascadeTag = validBits;	// When we know that the UID has more than 4 bytes
-
-  				break;
-
-
-
-  			case 2:
-
-  				buffer[0] = PICC_CMD_SEL_CL2;
-
-  				uidIndex = 3;
-
-  				useCascadeTag = 0;	// When we know that the UID has more than 7 bytes
-
-  				break;
-
-
-
-  			case 3:
-
-  				buffer[0] = PICC_CMD_SEL_CL3;
-
-  				uidIndex = 6;
-
-  				useCascadeTag = 0;						// Never used in CL3.
-
-  				break;
-
-
-
-  			default:
-
-  				return STATUS_INTERNAL_ERROR;
-
-  				break;
-
-  		}
-
-
-
-  		// How many UID bits are known in this Cascade Level?
-
-  		currentLevelKnownBits = validBits - (8 * uidIndex);
-
-  		if (currentLevelKnownBits < 0) {
-
-  			currentLevelKnownBits = 0;
-
-  		}
-
-  		// Copy the known bits from uid->uidByte[] to buffer[]
-
-  		index = 2; // destination index in buffer[]
-
-  		if (useCascadeTag) {
-
-  			buffer[index] = PICC_CMD_CT;
-
-  			index++;
-
-  		}
-
-  		uint8_t bytesToCopy = currentLevelKnownBits / 8 + (currentLevelKnownBits % 8 ? 1 : 0); // The number of bytes needed to represent the known bits for this level.
-
-  		if (bytesToCopy) {
-
-  			uint8_t maxBytes = useCascadeTag ? 3 : 4; // Max 4 bytes in each Cascade Level. Only 3 left if we use the Cascade Tag
-
-  			if (bytesToCopy > maxBytes) {
-
-  				bytesToCopy = maxBytes;
-
-  			}
-
-  			for (count = 0; count < bytesToCopy; count++) {
-
-  				buffer[index++] = uid[uidIndex + count];
-
-  			}
-
-  		}
-
-  		// Now that the data has been copied we need to include the 8 bits in CT in currentLevelKnownBits
-
-  		if (useCascadeTag) {
-
-  			currentLevelKnownBits += 8;
-
-  		}
-
-
-
-  		// Repeat anti collision loop until we can transmit all UID bits + BCC and receive a SAK - max 32 iterations.
-
-  		selectDone = 0;
-
-  		while (!selectDone) {
-
-  			// Find out how many bits and bytes to send and receive.
-
-  			if (currentLevelKnownBits >= 32) { // All UID bits in this Cascade Level are known. This is a SELECT.
-
-  				buffer[1] = 0x70; // NVB - Number of Valid Bits: Seven whole bytes
-
-  				// Calculate BCC - Block Check Character
-
-  				buffer[6] = buffer[2] ^ buffer[3] ^ buffer[4] ^ buffer[5];
-
-  				// Calculate CRC_A
-
-  				result = MFRC522_CalculateCRC(buffer, 7, &buffer[7]);
-
-  				if (result != STATUS_OK) {
-
-  					return result;
-
-  				}
-
-  				txLastBits		= 0; // 0 => All 8 bits are valid.
-
-  				bufferUsed		= 9;
-
-  				// Store response in the last 3 bytes of buffer (BCC and CRC_A - not needed after tx)
-
-  				responseBuffer	= &buffer[6];
-
-  				responseLength	= 3;
-
-  			}
-
-  			else { // This is an ANTICOLLISION.
-
-  				txLastBits		= currentLevelKnownBits % 8;
-
-  				count			= currentLevelKnownBits / 8;	// Number of whole bytes in the UID part.
-
-  				index			= 2 + count;					// Number of whole bytes: SEL + NVB + UIDs
-
-  				buffer[1]		= (index << 4) + txLastBits;	// NVB - Number of Valid Bits
-
-  				bufferUsed		= index + (txLastBits ? 1 : 0);
-
-  				// Store response in the unused part of buffer
-
-  				responseBuffer	= &buffer[index];
-
-  				responseLength	= sizeof(buffer) - index;
-
-  			}
-
-
-
-  			// Set bit adjustments
-
-  			rxAlign = txLastBits;											// Having a separate variable is overkill. But it makes the next line easier to read.
-
-  			MFRC522_WriteRegister(BitFramingReg, (rxAlign << 4) + txLastBits);	// RxAlign = BitFramingReg[6..4]. TxLastBits = BitFramingReg[2..0]
-
-
-
-  			// Transmit the buffer and receive the response.
-
-  			result = MFRC522_TransceiveData(buffer, bufferUsed, responseBuffer, &responseLength, &txLastBits);
-
-  			if (result == STATUS_COLLISION) { // More than one PICC in the field => collision.
-
-  				uint8_t valueOfCollReg = MFRC522_ReadRegister(CollReg); // CollReg[7..0] bits are: ValuesAfterColl reserved CollPosNotValid CollPos[4:0]
-
-  				if (valueOfCollReg & 0x20) { // CollPosNotValid
-
-  					return STATUS_COLLISION; // Without a valid collision position we cannot continue
-
-  				}
-
-  				uint8_t collisionPos = valueOfCollReg & 0x1F; // Values 0-31, 0 means bit 32.
-
-  				if (collisionPos == 0) {
-
-  					collisionPos = 32;
-
-  				}
-
-  				if (collisionPos <= currentLevelKnownBits) { // No progress - should not happen
-
-  					return STATUS_INTERNAL_ERROR;
-
-  				}
-
-  				// Choose the PICC with the bit set.
-
-  				currentLevelKnownBits	= collisionPos;
-
-  				count			= currentLevelKnownBits % 8; // The bit to modify
-
-  				checkBit		= (currentLevelKnownBits - 1) % 8;
-
-  				index			= 1 + (currentLevelKnownBits / 8) + (count ? 1 : 0); // First byte is index 0.
-
-  				buffer[index]	|= (1 << checkBit);
-
-  			}
-
-  			else if (result != STATUS_OK) {
-
-  				return result;
-
-  			}
-
-  			else { // STATUS_OK
-
-  				if (currentLevelKnownBits >= 32) { // This was a SELECT.
-
-  					selectDone = 1; // No more anticollision
-
-  					// We continue below outside the while.
-
-  				}
-
-  				else { // This was an ANTICOLLISION.
-
-  					// We now have all 32 bits of the UID in this Cascade Level
-
-  					currentLevelKnownBits = 32;
-
-  					// Run loop again to do the SELECT.
-
-  				}
-
-  			}
-
-  		} // End of while (!selectDone)
-
-
-
-  		// We do not check the CBB - it was constructed by us above.
-
-
-
-  		// Copy the found UID bytes from buffer[] to uid->uidByte[]
-
-  		index			= (buffer[2] == PICC_CMD_CT) ? 3 : 2; // source index in buffer[]
-
-  		bytesToCopy		= (buffer[2] == PICC_CMD_CT) ? 3 : 4;
-
-  		for (count = 0; count < bytesToCopy; count++) {
-
-  			uid[uidIndex + count] = buffer[index];
-
-  			index++;
-
-  		}
-
-
-
-  		// Check response SAK (Select Acknowledge)
-
-  		if (responseLength != 3 || txLastBits != 0) { // SAK must be exactly 24 bits (1 byte + CRC_A).
-
-  			return STATUS_ERROR;
-
-  		}
-
-  		// Verify CRC_A - do our own calculation and store the control in buffer[2..3] - those bytes are not needed anymore.
-
-  		result = MFRC522_CalculateCRC(responseBuffer, 1, &buffer[2]);
-
-  		if (result != STATUS_OK) {
-
-  			return result;
-
-  		}
-
-  		if ((buffer[2] != responseBuffer[1]) || (buffer[3] != responseBuffer[2])) {
-
-  			return STATUS_CRC_WRONG;
-
-  		}
-
-  		if (responseBuffer[0] & 0x04) { // Cascade bit set - UID not complete yes
-
-  			cascadeLevel++;
-
-  		}
-
-  		else {
-
-  			uidComplete = 1;
-
-  		}
-
-  	} // End of while (!uidComplete)
-
-
-
-  	// Set correct uid->size
-
-
-
-  	return STATUS_OK;
-
+  	for (count = 0; count < bytesToCopy; count++) {
+  		buffer[index++] = uid[uidIndex + count];
+  	} // for
+  } // if
+  // Now that the data has been copied we need to include the 8 bits in CT in currentLevelKnownBits
+  if (useCascadeTag) {
+  	currentLevelKnownBits += 8;
+  }
+
+  // Repeat anti collision loop until we can transmit all UID bits + BCC and receive a SAK - max 32 iterations.
+  selectDone = 0;
+  while (!selectDone) {
+  // Find out how many bits and bytes to send and receive.
+  if (currentLevelKnownBits >= 32) { // All UID bits in this Cascade Level are known. This is a SELECT.
+  	buffer[1] = 0x70; // NVB - Number of Valid Bits: Seven whole bytes
+  	// Calculate BCC - Block Check Character
+  	buffer[6] = buffer[2] ^ buffer[3] ^ buffer[4] ^ buffer[5];
+  	// Calculate CRC_A
+  	result = MFRC522_CalculateCRC(buffer, 7, &buffer[7]);
+  	if (result != STATUS_OK) {
+  		return result;
+  	}
+  	txLastBits = 0; // 0 => All 8 bits are valid.
+  	bufferUsed = 9;
+  	// Store response in the last 3 bytes of buffer (BCC and CRC_A - not needed after tx)
+  	responseBuffer = &buffer[6];
+  	responseLength = 3;
+  } else { // This is an ANTICOLLISION.
+  	txLastBits = currentLevelKnownBits % 8;
+  	count = currentLevelKnownBits / 8; // Number of whole bytes in the UID part.
+  	index = 2 + count; // Number of whole bytes: SEL + NVB + UIDs
+  	buffer[1] = (index << 4) + txLastBits; // NVB - Number of Valid Bits
+  	bufferUsed = index + (txLastBits ? 1 : 0);
+  	// Store response in the unused part of buffer
+  	responseBuffer = &buffer[index];
+  	responseLength = sizeof(buffer) - index;
+  } // else
+
+  // Set bit adjustments
+  rxAlign = txLastBits; // Having a separate variable is overkill. But it makes the next line easier to read.
+  MFRC522_WriteRegister(BitFramingReg, (rxAlign << 4) + txLastBits); // RxAlign = BitFramingReg[6..4]. TxLastBits = BitFramingReg[2..0]
+
+  // Transmit the buffer and receive the response.
+  result = MFRC522_TransceiveData(buffer, bufferUsed, responseBuffer, &responseLength, &txLastBits);
+  if (result == STATUS_COLLISION) { // More than one PICC in the field => collision.
+  	uint8_t valueOfCollReg = MFRC522_ReadRegister(CollReg); // CollReg[7..0] bits are: ValuesAfterColl reserved CollPosNotValid CollPos[4:0]
+  	if (valueOfCollReg & 0x20) { // CollPosNotValid
+  		return STATUS_COLLISION; // Without a valid collision position we cannot continue
+  	}
+  	uint8_t collisionPos = valueOfCollReg & 0x1F; // Values 0-31, 0 means bit 32.
+  	if (collisionPos == 0) {
+  		collisionPos = 32;
+  	}
+  	if (collisionPos <= currentLevelKnownBits) { // No progress - should not happen
+  		return STATUS_INTERNAL_ERROR;
+  	}
+  	// Choose the PICC with the bit set.
+  	currentLevelKnownBits = collisionPos;
+  	count = currentLevelKnownBits % 8; // The bit to modify
+  	checkBit = (currentLevelKnownBits - 1) % 8;
+  	index = 1 + (currentLevelKnownBits / 8) + (count ? 1 : 0); // First byte is index 0.
+  	buffer[index] |= (1 << checkBit);
+  } else if (result != STATUS_OK) {
+  	return result;
+  } else { // STATUS_OK
+  	if (currentLevelKnownBits >= 32) { // This was a SELECT.
+  	selectDone = 1; // No more anticollision
+  	// We continue below outside the while.
+  } else { // This was an ANTICOLLISION.
+  // We now have all 32 bits of the UID in this Cascade Level
+  currentLevelKnownBits = 32;
+  // Run loop again to do the SELECT.
+  }
+  }
+  } // End of while (!selectDone)
+
+  // We do not check the CBB - it was constructed by us above.
+
+  // Copy the found UID bytes from buffer[] to uid->uidByte[]
+  index = (buffer[2] == PICC_CMD_CT) ? 3 : 2; // source index in buffer[]
+  bytesToCopy = (buffer[2] == PICC_CMD_CT) ? 3 : 4;
+  for (count = 0; count < bytesToCopy; count++) {
+  uid[uidIndex + count] = buffer[index];
+  index++;
+  }
+
+  // Check response SAK (Select Acknowledge)
+  if (responseLength != 3 || txLastBits != 0) { // SAK must be exactly 24 bits (1 byte + CRC_A).
+  return STATUS_ERROR;
+  }
+  // Verify CRC_A - do our own calculation and store the control in buffer[2..3] - those bytes are not needed anymore.
+  result = MFRC522_CalculateCRC(responseBuffer, 1, &buffer[2]);
+  if (result != STATUS_OK) {
+  return result;
+  }
+  if ((buffer[2] != responseBuffer[1]) || (buffer[3] != responseBuffer[2])) {
+  return STATUS_CRC_WRONG;
+  }
+  if (responseBuffer[0] & 0x04) { // Cascade bit set - UID not complete yes
+  cascadeLevel++;
+  }
+  else {
+  uidComplete = 1;
+  }
+  } // End of while (!uidComplete)
+
+  // Set correct uid->size
+
+  return STATUS_OK;
   } // End PICC_Select()
 
+// Returns the number of a card, 0 if no change, -1 if no card is present
+int MFRC522_ReadCard() {
+	static int last_card = -1;
+	// Check if a card is present
+	int card_present = MFRC522_IsNewCardPresent();
+	if (!card_present) {
+		return -1;
+	} // if
 
+	// Read the uid on the card
+ 	uint8_t uid[7];
+ 	int error_reading = MFRC522_Select(uid);
+ 	if (error_reading) {
+ 		return -1;
+ 	} // if
+	
+ 	// find the corresponding card
+ 	for (int i = 0; i < 104; i++) {
+ 		int j = 1;
+ 		for (; j < 3; j++) {
+ 			if (uid[j] != card_uids[i][j-1]) break;
+ 		} // for
+ 		if (j == 3) { // if this card matches
+ 			if (i % 52 == last_card) {
+ 				return 0;
+ 			} else {
+ 				last_card = i % 52;
+ 				return (i % 52) + 1;
+ 			}
+ 		} // if
+ 	} // for
 
-  // Returns the number of a card, -1 if no card is present
-  int MFRC522_ReadCard() {
-	  // Check if a card is present
-	  int card_present = MFRC522_IsNewCardPresent();
-	  if (!card_present) {
-		  return -1;
-	  } // if
-	  // printf("Card present!");
-	  // Get the uid of the card
-	  uint8_t uid[7];
-	  int error_reading = MFRC522_Select(uid);
-	  if (!error_reading) {
-		  // Find the corresponding card
-		  for (int i = 0; i < 52; i++) { // Iterate through number of cards
-			  // If any byte differs from the UID, start on next card
-			  int j = 0;
-			  for (; j < 7; j++) {
-				  if (uid[j] != card_uids[i][j]) break;
-			  } // for
-			  // Only continue if not interrupted
-			  if (j == 7) return i;
-		  } // for
-	  }
-		
-	  // If there is an error reading the uid, or the read UID doesn't match any card, return -1
-	  return -1;
+ 	// If there's an error reading the uid
+ 	return -1;
 
-  }
-
-
+} // MFRC522_ReadCard()
 
 /*******************************
- * SD Card / .Wav File Read Code
- *******************************/
-  static void setSampleRate(uint16_t freq)
-  {
-    uint16_t period = (80000000 / freq) - 1;
-
-    htim4.Instance = TIM4;
-    htim4.Init.Prescaler = 0;
-    htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim4.Init.Period = period;
-    htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-    htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-    HAL_TIM_Base_Init(&htim4);
-  }
-
-  static inline uint16_t val2Dac8(int32_t v)
-  {
-    uint16_t out = v << 3;
-    return out;
-  }
-
-  static inline uint16_t val2Dac16(int32_t v)
-  {
-    v >>= 4;
-    v += 2047;
-    return v & 0xfff;
-  }
-
-  static void prepareDACBuffer_8Bit(uint8_t channels, uint16_t numSamples, void *pIn, uint16_t *pOutput)
-  {
-    uint8_t *pInput = (uint8_t *)pIn;
-
-    for (int i=0; i<numSamples; i++) {
-      int32_t val = 0;
-
-      for(int j=0; j<channels; j++) {
-        val += *pInput++;
-      }
-      val /= channels;
-      *pOutput++ = val2Dac8(val);
-    }
-  }
-
-  static void prepareDACBuffer_16Bit(uint8_t channels, uint16_t numSamples, void *pIn, uint16_t *pOutput)
-  {
-    int16_t *pInput = (int16_t *)pIn;
-
-    for (int i=0; i<numSamples; i++) {
-      int32_t val = 0;
-
-      for(int j=0; j<channels; j++) {
-        val += *pInput++;
-      }
-      val /= channels;
-      *pOutput++ = val2Dac16(val);
-    }
-  }
-
-  static void outputSamples(FIL *fil, struct Wav_Header *header)
-  {
-    const uint8_t channels = header->channels;
-    const uint8_t bytesPerSample = header->bitsPerSample / 8;
-
-    funcP prepareData = (header->bitsPerSample == 8)? prepareDACBuffer_8Bit : prepareDACBuffer_16Bit;
-
-    flg_dma_done = 1;
-    dmaBank = 0;
-
-    uint32_t bytes_last = header->dataChunkLength;
-
-    while(0 < bytes_last) {
-
-      int blksize = (header->bitsPerSample == 8)? MIN(bytes_last, BUFSIZE / 2) : MIN(bytes_last, BUFSIZE);
-
-      UINT bytes_read;
-      FRESULT res;
-
-      res = f_read(fil, fileBuffer, blksize, &bytes_read);
-      if (res != FR_OK || bytes_read == 0)
-        break;
-
-      uint16_t numSamples = bytes_read / bytesPerSample / channels;
-      int16_t     *pInput = (int16_t *)fileBuffer;
-      uint16_t   *pOutput = (uint16_t *)dmaBuffer[dmaBank];
-
-      prepareData(channels, numSamples, pInput, pOutput);
-
-      // wait for DMA complete
-      while(flg_dma_done == 0) {
-        __NOP();
-      }
-
-      HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
-      flg_dma_done = 0;
-      HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)dmaBuffer[dmaBank], numSamples, DAC_ALIGN_12B_R);
-
-      dmaBank = !dmaBank;
-      bytes_last -= blksize;
-    };
-
-    while(flg_dma_done == 0) {
-      __NOP();
-    }
-
-    HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
-  }
-
-  static uint8_t isSupprtedWavFile(const struct Wav_Header *header)
-  {
-    if (strncmp(header->riff, "RIFF", 4 ) != 0)
-      return 0;
-
-    if (header->vfmt != 1)
-      return 0;
-
-    if (strncmp(header->dataChunkHeader, "data", 4 ) != 0)
-      return 0;
-
-    return 1;
-  }
-
-  static void playWavFile(char *filename)
-  {
-    FIL fil;
-    FRESULT res;
-    UINT count = 0;
-
-    struct Wav_Header header;
-
-    res = f_open(&fil, filename, FA_READ);
-    if (res != FR_OK)
-      return;
-
-    res = f_read(&fil, &header, sizeof(struct Wav_Header), &count);
-    if (res != FR_OK)
-      goto done;
-
-    if (!isSupprtedWavFile(&header))
-      goto done;
-
-    setSampleRate(header.sampleFreq);
-    outputSamples(&fil, &header);
-
-  done :
-    res = f_close(&fil);
-    if (res != FR_OK)
-      return;
-  }
-
-  /*******************************
- Load Cell Sensor
- *******************************/
+Load Cell Sensor
+*******************************/
 void delay_ten_ns(uint16_t us) { //10 ns delay function
 	__HAL_TIM_SET_COUNTER(HX711_Timer, 0);  // set the counter value a 0
 	while (__HAL_TIM_GET_COUNTER(HX711_Timer) < us){
@@ -1318,74 +646,74 @@ void delay_ten_ns(uint16_t us) { //10 ns delay function
 	}
 }
 void HX711_Init(TIM_HandleTypeDef *timer) {
-  // Ensure SCK starts LOW
+ // Ensure SCK starts LOW
 HX711_Timer = timer;
 HAL_TIM_Base_Start(HX711_Timer);
-  HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_RESET);
+ HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_RESET);
 }
 
 
 int32_t HX711_Read(void) {
-  int32_t data = 0;
+ int32_t data = 0;
 
-  // 1. Wait until HX711 is ready (DATA goes LOW)
-  uint32_t timeout = HX711_TIMEOUT;
-  //Data pin goes low when data is ready
-  while (HAL_GPIO_ReadPin(HX711_DATA_GPIO, HX711_DATA_PIN)) {
-      if (--timeout == 0) {
-          // printf("HX711 Timeout! Check wiring.\n");
-          return -1;
-      }
-  }
-  delay_ten_ns(12);
+ // 1. Wait until HX711 is ready (DATA goes LOW)
+ uint32_t timeout = HX711_TIMEOUT;
+ //Data pin goes low when data is ready
+ while (HAL_GPIO_ReadPin(HX711_DATA_GPIO, HX711_DATA_PIN)) {
+     if (--timeout == 0) {
+         // printf("HX711 Timeout! Check wiring.\n");
+         return -1;
+     }
+ }
+ delay_ten_ns(12);
 
-  // 2. Read 24 bits (MSB first)
-  for (uint8_t i = 0; i < 24; i++) {
-      HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_SET);
-      delay_ten_ns(5);
-      data = (data << 1) | HAL_GPIO_ReadPin(HX711_DATA_GPIO, HX711_DATA_PIN);
-      delay_ten_ns(20);
-      HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_RESET);
-      delay_ten_ns(25);
-  }
+ // 2. Read 24 bits (MSB first)
+ for (uint8_t i = 0; i < 24; i++) {
+     HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_SET);
+     delay_ten_ns(5);
+     data = (data << 1) | HAL_GPIO_ReadPin(HX711_DATA_GPIO, HX711_DATA_PIN);
+     delay_ten_ns(20);
+     HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_RESET);
+     delay_ten_ns(25);
+ }
 
-  // 3. Set Gain (128 by default → 1 extra clock pulse)
-  HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_SET);
-  delay_ten_ns(25);
-  HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_RESET);
+ // 3. Set Gain (128 by default → 1 extra clock pulse)
+ HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_SET);
+ delay_ten_ns(25);
+ HAL_GPIO_WritePin(HX711_CLK_GPIO, HX711_CLK_PIN, GPIO_PIN_RESET);
 
-  // 4. Convert signed 24-bit value
-  if (data & 0x800000) {  // If MSB is 1 (negative number)
-      data |= 0xFF000000;  // Sign extend to 32-bit
-  }
+ // 4. Convert signed 24-bit value
+ if (data & 0x800000) {  // If MSB is 1 (negative number)
+     data |= 0xFF000000;  // Sign extend to 32-bit
+ }
 
-  return data;
+ return data;
 }
 int HX711_GetWeight(void) {
-  int32_t raw_data = HX711_Read();
-  if (raw_data == -1) return -1;  // Error case
+ int32_t raw_data = HX711_Read();
+ if (raw_data == -1) return -1;  // Error case
 //    printf("rawww: %ld\r\n", raw_data);
-  return (raw_data + OFFSET) / SCALE_FACTOR;
+ return (raw_data + OFFSET) / SCALE_FACTOR;
 }
 
- /*******************************
+/*******************************
 PS2 Controller Code
- *******************************/
+*******************************/
 uint8_t PS2_SendByte(uint8_t cmd) {
 	uint8_t data = 0x00;
 	uint16_t buffer = 0x01;
 	for (buffer = 0x01; buffer < 0x0100; buffer <<= 1) {
 		if (buffer & cmd) {
-			HAL_GPIO_WritePin(MOSI_GPIO_Port, MOSI_Pin, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(PS2_MOSI_GPIO_Port, PS2_MOSI_Pin, GPIO_PIN_SET);
 		} else {
-			HAL_GPIO_WritePin(MOSI_GPIO_Port, MOSI_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(PS2_MOSI_GPIO_Port, PS2_MOSI_Pin, GPIO_PIN_RESET);
 		}
-		HAL_GPIO_WritePin(SCK_GPIO_Port, SCK_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(PS2_SCK_GPIO_Port, PS2_SCK_Pin, GPIO_PIN_SET);
 		delay(8);
-		HAL_GPIO_WritePin(SCK_GPIO_Port, SCK_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(PS2_SCK_GPIO_Port, PS2_SCK_Pin, GPIO_PIN_RESET);
 		delay(8);
-		HAL_GPIO_WritePin(SCK_GPIO_Port, SCK_Pin, GPIO_PIN_SET);
-		if (HAL_GPIO_ReadPin(MISO_GPIO_Port, MISO_Pin)) {
+		HAL_GPIO_WritePin(PS2_SCK_GPIO_Port, PS2_SCK_Pin, GPIO_PIN_SET);
+		if (HAL_GPIO_ReadPin(PS2_MISO_GPIO_Port, PS2_MISO_Pin)) {
 			data |= buffer;
 		}
 	}
@@ -1393,12 +721,12 @@ uint8_t PS2_SendByte(uint8_t cmd) {
 	return data;
 }
 void PS2_Cmd(uint8_t *transmit, uint8_t *receive, uint8_t length) {
-	HAL_GPIO_WritePin(SS_GPIO_Port, SS_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(PS2_SS_GPIO_Port, PS2_SS_Pin, GPIO_PIN_RESET);
 	delay(8);
 	for (uint8_t i = 0; i < length; i++) {
 		receive[i] = PS2_SendByte(transmit[i]);
 	}
-	HAL_GPIO_WritePin(SS_GPIO_Port, SS_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(PS2_SS_GPIO_Port, PS2_SS_Pin, GPIO_PIN_SET);
 	delay(8);
 }
 
@@ -1468,6 +796,7 @@ void PS2_Update() {
 	PS2_PS2->LX = receive[7];
 	PS2_PS2->LY = receive[8];
 }
+
 /* USER CODE END 0 */
 
 /**
@@ -1488,15 +817,7 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
-  // Initializes timer 4, channel 2 used for delay()
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
- 
-  // Initializes timer 2, channel 3 used for the Servo PWM
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
-  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1499); // Toggles Servo speed ( =1499 : stop;  <1499 : clockwise; >1499 : counter-clockwise)
 
-  // Initializes the DC Motor to off
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 0);
 	
   /* USER CODE END Init */
 
@@ -1512,23 +833,28 @@ int main(void)
   MX_DMA_Init();
   MX_DAC1_Init();
   MX_LPUART1_UART_Init();
-  MX_SDMMC1_SD_Init();
   MX_SPI2_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM4_Init();
   MX_TIM5_Init();
-  MX_FATFS_Init();
   MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
 	
-	// Initialize MFRC522 RFID module
-	MFRC522_Init();
-  //Initialize the Load Cell Module
+// Initialize MFRC522 RFID module
+MFRC522_Init();
+//Initialize the Load Cell Module
   HX711_Init(&htim1);
-	//Initialize the PS2 Controller
-  PS2Buttons PS2;
-  PS2_Init(&htim4, &PS2);
+//Initialize the PS2 Controller
+ PS2Buttons PS2;
+ PS2_Init(&htim4, &PS2);
+ // Initializes timer 4, channel 2 used for delay()
+HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+// Initializes timer 2, channel 3 used for the Servo PWM
+HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1499); // Toggles Servo speed ( =1499 : stop;  <1499 : clockwise; >1499 : counter-clockwise)
+// Initializes the DC Motor to off
+HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 0);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -1538,6 +864,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1299);
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 1);
   }
   /* USER CODE END 3 */
 }
@@ -1680,34 +1008,6 @@ static void MX_LPUART1_UART_Init(void)
   /* USER CODE BEGIN LPUART1_Init 2 */
 
   /* USER CODE END LPUART1_Init 2 */
-
-}
-
-/**
-  * @brief SDMMC1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_SDMMC1_SD_Init(void)
-{
-
-  /* USER CODE BEGIN SDMMC1_Init 0 */
-
-  /* USER CODE END SDMMC1_Init 0 */
-
-  /* USER CODE BEGIN SDMMC1_Init 1 */
-
-  /* USER CODE END SDMMC1_Init 1 */
-  hsd1.Instance = SDMMC1;
-  hsd1.Init.ClockEdge = SDMMC_CLOCK_EDGE_RISING;
-  hsd1.Init.ClockPowerSave = SDMMC_CLOCK_POWER_SAVE_DISABLE;
-  hsd1.Init.BusWide = SDMMC_BUS_WIDE_1B;
-  hsd1.Init.HardwareFlowControl = SDMMC_HARDWARE_FLOW_CONTROL_DISABLE;
-  hsd1.Init.ClockDiv = 0;
-  hsd1.Init.Transceiver = SDMMC_TRANSCEIVER_DISABLE;
-  /* USER CODE BEGIN SDMMC1_Init 2 */
-
-  /* USER CODE END SDMMC1_Init 2 */
 
 }
 
