@@ -120,10 +120,176 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	int state = 1;
   while (1)
   {
 	  PS2_Update();
-
+	switch (state) {
+		case 1:
+			if (PS2.DOWN) {
+				state = 2;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image2);
+			}
+			else if (PS2.CROSS) {
+				state = 5;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image5);
+			}
+			break:
+		case 2:
+			if (PS2.UP) {
+				state = 1;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image1);
+			}
+			else if (PS2.DOWN) {
+				state = 3;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image3);
+			}
+			else if (PS2.CROSS) {
+				state = 11;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image11);
+			}
+			break:
+		case 3:
+			if (PS2.UP) {
+				state = 2;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image2);
+			}
+			else if (PS2.DOWN) {
+				state = 4;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image4);
+			}
+			else if (PS2.CROSS) {
+				state = 18;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image18);
+			}
+			break:
+		case 4:
+			if (PS2.UP) {
+				state = 3;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image3);
+			}
+			else if (PS2.CROSS) {
+				state = 19;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image19);
+			}
+			break:
+		case 5:
+			if (PS2.DOWN) {
+				state = 6;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image6);
+			}
+			else if (PS2.CIRCLE) {
+				state = 10;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image10);
+			}
+			break:
+		case 6:
+			if (PS2.UP) {
+				state = 5;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image5);
+			}
+			else if (PS2.DOWN) {
+				state = 7;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image7);
+			}
+			else if (PS2.CIRCLE) {
+				state = 10;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image10);
+			}
+			break:
+		case 7:
+			if (PS2.UP) {
+				state = 6;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image6);
+			}
+			else if (PS2.DOWN) {
+				state = 8;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image8);
+			}
+			else if (PS2.CIRCLE) {
+				state = 10;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image10);
+			}
+			break:
+		case 8:
+			if (PS2.UP) {
+				state = 7;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image7);
+			}
+			else if (PS2.DOWN) {
+				state = 9;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image9);
+			}
+			else if (PS2.CIRCLE) {
+				state = 10;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image10);
+			}
+			break:
+		case 9:
+			if (PS2.UP) {
+				state = 8;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image8);
+			}
+			else if (PS2.CIRCLE) {
+				state = 10;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image10);
+			}
+			break:
+		case 10:
+			// Run 3 card poker
+			break:
+		case 11:
+			// Run sort
+			break:
+		case 12:
+			if (PS2.TRIANGLE) {
+				state = 1;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image1);
+			}
+			break:
+		case 13:
+			if (PS2.TRIANGLE) {
+				state = 1;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image1);
+			}
+			break:
+		case 14:
+			if (PS2.TRIANGLE) {
+				state = 1;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image1);
+			}
+			break:
+		case 15:
+			if (PS2.TRIANGLE) {
+				state = 1;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image1);
+			}
+			break:
+		case 16:
+			if (PS2.TRIANGLE) {
+				state = 1;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image1);
+			}
+			break:
+		case 17:
+			if (PS2.TRIANGLE) {
+				state = 1;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image1);
+			}
+			break:
+		case 18:
+			if (PS2.SQUARE) {
+				state = 1;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image1);
+			}
+			break:
+		case 19:
+			if (PS2.TRIANGLE) {
+				state = 1;
+				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image1);
+			}
+			break:
+	}
 // 	  LED-Code Demo
 //	  if (PS2.UP) {
 //		  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
