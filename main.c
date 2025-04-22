@@ -174,7 +174,7 @@ int main(void)
 			}
 			break:
 		case 5:
-			if (PS2.DOWN) {
+			if (PS2.UP) {
 				state = 6;
 				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image6);
 			}
@@ -184,11 +184,11 @@ int main(void)
 			}
 			break:
 		case 6:
-			if (PS2.UP) {
+			if (PS2.DOWN) {
 				state = 5;
 				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image5);
 			}
-			else if (PS2.DOWN) {
+			else if (PS2.UP) {
 				state = 7;
 				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image7);
 			}
@@ -198,11 +198,11 @@ int main(void)
 			}
 			break:
 		case 7:
-			if (PS2.UP) {
+			if (PS2.DOWN) {
 				state = 6;
 				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image6);
 			}
-			else if (PS2.DOWN) {
+			else if (PS2.UP) {
 				state = 8;
 				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image8);
 			}
@@ -212,11 +212,11 @@ int main(void)
 			}
 			break:
 		case 8:
-			if (PS2.UP) {
+			if (PS2.DOWN) {
 				state = 7;
 				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image7);
 			}
-			else if (PS2.DOWN) {
+			else if (PS2.UP) {
 				state = 9;
 				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image9);
 			}
@@ -226,7 +226,7 @@ int main(void)
 			}
 			break:
 		case 9:
-			if (PS2.UP) {
+			if (PS2.DOWN) {
 				state = 8;
 				ST7735_DrawImage(0, 0, ST7735_WIDTH, ST7735_HEIGHT, image8);
 			}
