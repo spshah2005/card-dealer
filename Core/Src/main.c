@@ -813,25 +813,33 @@ int MFRC522_ReadCard() {
 } // MFRC522_ReadCard()
 // Sorting functions //
 sorting(){
-	int card;
+	int card = -1;
 	num_player = 3;
 	for(int i = 0; i < 51; ++i){
-		card; // = John RFID function
+		_HAL_TIMSET_COMPARE(&htim2, TIM_CHANNE_3, 1249); // turn on servo
+		while(card < 0){
+			card = MFRC522_ReadCard();
+		}
 		if(card % 13 < 13){
 		turn_to_player(0, 50);
-		// set servo and dc to deal card
+		_HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 1); // turn on dc motor
 		}
 		if(card % 13 < 26){
-			// copy and past the first if statment to deal cards here
+			turn_to_player(1, 50);
+			_HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 1); // turn on dc motor
 		}
 		if(card % 13 < 39){
-
+			turn_to_player(2, 50);
+			_HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 1); // turn on dc motor
 		}
 		else{
-
+			turn_to_player(3, 50);
+			_HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 1); // turn on dc motor
 		}
 		
 	}
+	_HAL_TIMSET_COMPARE(&htim2, TIM_CHANNE_3, 1499); // turn on servo
+	_HAL_GPIO_WritePin(GPIOE, GPIO_PIN_15, 0); // turn on dc motor
 	
 }
 
