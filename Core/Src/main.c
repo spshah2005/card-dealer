@@ -811,6 +811,31 @@ int MFRC522_ReadCard() {
  	return -1;
 
 } // MFRC522_ReadCard()
+// Sorting functions //
+sorting(){
+	int card;
+	num_player = 3;
+	for(int i = 0; i < 51; ++i){
+		card; // = John RFID function
+		if(card % 13 < 13){
+		turn_to_player(0, 50);
+		// set servo and dc to deal card
+		}
+		if(card % 13 < 26){
+			// copy and past the first if statment to deal cards here
+		}
+		if(card % 13 < 39){
+
+		}
+		else{
+
+		}
+		
+	}
+	
+}
+
+// End of sorting functions // 
 
 /* USER CODE END 0 */
 
